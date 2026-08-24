@@ -279,6 +279,9 @@ async def railway_up(source_dir: str, project_id: str, service_id: str,
     """Runs `railway up` in a subprocess. Streams no logs (uses --detach).
     Returns (ok, combined_output)."""
     env = os.environ.copy()
+    # Railway CLI: account tokens go in RAILWAY_API_TOKEN, project tokens in RAILWAY_TOKEN.
+    # We set BOTH so the same env var works regardless of token type.
+    env["RAILWAY_API_TOKEN"] = _token()
     env["RAILWAY_TOKEN"] = _token()
     cmd = [
         "railway", "up", source_dir,
