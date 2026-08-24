@@ -232,15 +232,32 @@ async def get_runtime_logs(deployment_id: str, limit: int = 200) -> list[dict]:
 
 
 # ---------- Domains ----------
-async def create_service_domain(service_id: str, environment_id: str) -> dict:
+async def create_service_domain(project_id: str, service_id: str, environment_id: str,
+                                 target_port: Optional[int] = None) -> dict:
+    inp: dict[str, Any] = {"projectId": project_id, "serviceId": service_id, "environmentId": environment_id}
+    if target_port is not None:
+        inp["targetPort"] = target_port
     d = await gql("""
-      mutation($serviceId: String!, $environmentId: String!) {
-        serviceDomainCreate(input: {serviceId: $serviceId, environmentId: $environmentId}) {
+      mutation($input: ServiceDomainCreateInput!) {
+        serviceDomainCreate(input: $input) {
           id domain
         }
       }
-    """, {"serviceId": service_id, "environmentId": environment_id})
+    """, {"input": inp})
     return d["serviceDomainCreate"]
+
+
+async def update_service_domain(service_domain_id: str, service_id: str,
+                                 environment_id: str, domain: str,
+                                 target_port: int) -> bool:
+    d = await gql("""
+      mutation($input: ServiceDomainUpdateInput!) { serviceDomainUpdate(input: $input) }
+    """, {"input": {
+        "serviceDomainId": service_domain_id, "serviceId": service_id,
+        "environmentId": environment_id, "domain": domain,
+        "targetPort": target_port,
+    }})
+    return bool(d.get("serviceDomainUpdate"))
 
 
 async def create_custom_domain(project_id: str, service_id: str, environment_id: str,

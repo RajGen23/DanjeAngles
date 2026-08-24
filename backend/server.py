@@ -166,7 +166,7 @@ async def run_real_deploy(deployment_id: str, project_local_id: str, zip_path: s
         rw_public_url = project.get("url")
         if not rw_public_url or "selfhost.app" in rw_public_url:
             try:
-                dom = await rw.create_service_domain(rw_service_id, rw_env_id)
+                dom = await rw.create_service_domain(rw_project_id, rw_service_id, rw_env_id)
                 rw_public_url = f"https://{dom['domain']}"
                 await _log(deployment_id, "ok", f"Public URL assigned: {rw_public_url}")
             except Exception as e:
