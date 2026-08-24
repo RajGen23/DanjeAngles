@@ -2,7 +2,7 @@ import { useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
-import { Database, ExternalLink, History, KeyRound, RotateCw, Trash2, Zap } from "lucide-react";
+import { Database, ExternalLink, Github, History, KeyRound, RotateCw, Settings, Trash2, Zap } from "lucide-react";
 
 const STATUS_STYLES = {
   running: "bg-emerald-100 text-emerald-800",
@@ -28,7 +28,7 @@ const IconBtn = ({ title, onClick, disabled, children, testId, active }) => (
   </button>
 );
 
-export default function ProjectsList({ projects, api, onChange, onOpenEnv, onOpenHistory }) {
+export default function ProjectsList({ projects, api, onChange, onOpenEnv, onOpenHistory, onOpenSettings }) {
   const [busy, setBusy] = useState(null);
 
   const redeploy = async (p) => {
@@ -123,6 +123,11 @@ export default function ProjectsList({ projects, api, onChange, onOpenEnv, onOpe
                       <Database size={9} strokeWidth={2} /> mongo
                     </span>
                   )}
+                  {p.github_sync && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-900 text-white flex items-center gap-1" data-testid={`github-badge-${p.name}`}>
+                      <Github size={9} strokeWidth={2} /> synced
+                    </span>
+                  )}
                 </div>
                 <div className="mt-0.5 flex items-center gap-3 text-xs text-neutral-500">
                   <span>{p.framework || "detecting"}</span>
@@ -152,6 +157,9 @@ export default function ProjectsList({ projects, api, onChange, onOpenEnv, onOpe
                 </IconBtn>
                 <IconBtn title="Environment variables" onClick={() => onOpenEnv(p)} testId={`env-btn-${p.name}`}>
                   <KeyRound size={14} strokeWidth={1.5} />
+                </IconBtn>
+                <IconBtn title="Project settings (token, GitHub)" onClick={() => onOpenSettings(p)} testId={`settings-btn-${p.name}`}>
+                  <Settings size={14} strokeWidth={1.5} />
                 </IconBtn>
                 <IconBtn
                   title="Redeploy last version"

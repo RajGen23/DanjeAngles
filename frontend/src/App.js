@@ -10,6 +10,7 @@ import ResourceCharts from "@/components/hosting/ResourceCharts";
 import DomainsPanel from "@/components/hosting/DomainsPanel";
 import EnvVarsPanel from "@/components/hosting/EnvVarsPanel";
 import DeployHistoryPanel from "@/components/hosting/DeployHistoryPanel";
+import ProjectSettingsModal from "@/components/hosting/ProjectSettingsModal";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -19,6 +20,7 @@ function App() {
   const [owner, setOwner] = useState(null);
   const [envProject, setEnvProject] = useState(null);
   const [historyProject, setHistoryProject] = useState(null);
+  const [settingsProject, setSettingsProject] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -73,7 +75,7 @@ function App() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            <ProjectsList projects={projects} api={API} onChange={refresh} onOpenEnv={setEnvProject} onOpenHistory={setHistoryProject} />
+            <ProjectsList projects={projects} api={API} onChange={refresh} onOpenEnv={setEnvProject} onOpenHistory={setHistoryProject} onOpenSettings={setSettingsProject} />
             <DeployPanel api={API} onDeployed={refresh} projects={projects} />
           </div>
           <div className="space-y-6">
@@ -85,6 +87,15 @@ function App() {
 
       {envProject && <EnvVarsPanel api={API} project={envProject} onClose={() => setEnvProject(null)} />}
       {historyProject && <DeployHistoryPanel api={API} project={historyProject} onClose={() => setHistoryProject(null)} />}
+      {settingsProject && (
+        <ProjectSettingsModal
+          api={API}
+          project={projects.find((p) => p.id === settingsProject.id) || settingsProject}
+          ghUser={owner?.github_user}
+          onClose={() => setSettingsProject(null)}
+          onChange={refresh}
+        />
+      )}
     </div>
   );
 }

@@ -1,62 +1,58 @@
 # PRD — selfhost: Self-Hosting Control Panel (Railway-backed)
 
 ## Original Problem Statement
-User wants their own hosting control panel to upload Emergent app exports and deploy them without paying per-app on Emergent. Minimal, beautiful design.
-
-## User Choices
-- Real hosting via **Railway.app**
-- Account token + GitHub PAT + per-project tokens (all in `/app/backend/.env`)
-- Owner email: `rajgen1299@gmail.com`
-- Minimal light design (Swiss high-contrast)
+User wants their own hosting control panel to upload Emergent app exports and deploy them without paying per-app on Emergent.
 
 ## Architecture
 ```
-Browser  →  FastAPI (this panel)  →  MongoDB (panel state)
-                    ├─►  Railway GraphQL (account token: projects, services, env, domains, deployments, rollback)
-                    └─►  Railway CLI     (project-scoped tokens per app: `railway up` source upload)
+Browser  →  FastAPI panel  →  MongoDB (panel state)
+                 ├─►  Railway GraphQL      (account token — projects, services, env, domains, deployments, rollback)
+                 ├─►  Railway CLI          (per-project token — `railway up` source upload)
+                 └─►  GitHub REST + git    (GITHUB_PAT — mirror every successful deploy to a private repo)
 ```
 
-## Implemented (Feb 2026)
+## Implemented
 ### Session 1 — Real Railway hosting
-- POST /api/deploy (real `railway up` + real logs streamed from Railway API)
+- POST /api/deploy → real `railway up` + real streamed logs
 - Env vars per project (GET/POST/DELETE `/api/projects/{id}/env`)
-- Custom domains via Railway `customDomainCreate` with live DNS record display
+- Custom domains via `customDomainCreate` with live DNS record UI
 - Owner/connectivity meta
 
-### Session 2 — Mongo + History
-- One-click Mongo (`mongo:7` service + `/data/db` volume + `${{Mongo.MONGO_URL}}` reference injected into app service)
-- Deploy history modal with rollback (`deploymentRollback` mutation)
+### Session 2 — Mongo + Deploy history
+- One-click Mongo: `mongo:7` service + `/data/db` volume + `${{Mongo.MONGO_URL}}` reference auto-injected
+- Deploy history modal + `deploymentRollback` mutation on any past success
 
-### Session 3 — Real Morning Soft deploy
-- Fetched full Morning Soft® e-commerce source (68 files, 8.6 MB) from code-server via `/vscode-remote-resource` (auth cookie + browser UA)
-- Wrote Dockerfile + railway.json for both backend (Python 3.11 + `--extra-index-url` for emergentintegrations) and frontend (Node 20 + `serve`)
-- Deployed to Railway project `fb47cf58-c686-4486-a5ad-779069c5bda9`:
-  - Backend service `morningsoft-api` → https://morningsoft-api-production.up.railway.app
-  - Mongo service auto-provisioned with `MONGO_URL` reference wired into backend
-  - Frontend service `morningsoft-web` → https://morningsoft-web-production.up.railway.app
-  - All 5 backend secrets pushed (STRIPE_API_KEY, JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD, CORS_ORIGINS)
-  - `REACT_APP_BACKEND_URL` set on frontend before build
-- Fixed CLI auth: user provided **project-scoped token** (account tokens don't work with `railway up`); token stored per-project on our panel record
+### Session 3 — Deploy Morning Soft
+- Fetched full Morning Soft source (68 files, 8.6MB) from code-server via `/vscode-remote-resource`
+- Dockerfiles for backend (`--extra-index-url` for emergentintegrations) and frontend (Node 20 + `serve`)
+- 3-service Railway project (backend/mongo/frontend) live at:
+  - https://morningsoft-web-production.up.railway.app
+  - https://morningsoft-api-production.up.railway.app/api/
+  - Admin: `admin@morningsofttissue.com` / `MorningSoft@2026`
+
+### Session 4 — Redeploy fix + GitHub mirror
+- `railway_up` now accepts a per-project token override (project-scoped token stored on the project record)
+- POST /api/projects/{id}/token — saves per-project Railway token
+- POST /api/projects/{id}/github — toggles GitHub mirror per project
+- github_client.py — creates/updates `emergent-hosted-<slug>` repo via GitHub REST + force-pushes source via `git` CLI on each successful deploy
+- Frontend: ProjectSettingsModal.jsx (gear icon per project) — paste Railway token, toggle GitHub sync, view mirror URL
+- Owner endpoint now returns `github_user` for header indicator
+- ProjectsList shows `mongo` and `synced` badges
 
 ## Backlog
-- **P1** Panel UX: prompt for project token on deploy (or auto-generate when possible) so future deploys don't need CLI-token workaround
-- **P1** Live runtime logs tab (`deploymentLogs` query)
-- **P2** GitHub PAT integration — push zip contents to a temp GitHub repo, use Railway git-source (would remove the project-token requirement entirely)
-- **P2** JWT auth for the panel itself
+- P1 Live runtime logs tab (`deploymentLogs` query)
+- P2 Panel auth (JWT)
+- P2 Auto-provision Postgres too (`postgres:16` image)
 
 ## Files
-- `/app/backend/server.py` — FastAPI routes
-- `/app/backend/railway_client.py` — Railway GraphQL + CLI helpers
-- `/app/frontend/src/App.js` — layout + modal wiring
-- `/app/frontend/src/components/hosting/*.jsx` — DeployPanel, DomainsPanel, EnvVarsPanel, DeployHistoryPanel, ProjectsList, ResourceCharts, StatsCards
+- Backend: `server.py`, `railway_client.py`, `github_client.py`
+- Frontend: `App.js`, `components/hosting/{DeployPanel,DomainsPanel,EnvVarsPanel,DeployHistoryPanel,ProjectSettingsModal,ProjectsList,ResourceCharts,StatsCards}.jsx`
 
-## Env vars (in /app/backend/.env)
-- `RAILWAY_TOKEN` — account-scoped for GraphQL
-- `RAILWAY_GRAPHQL_URL`
-- `OWNER_EMAIL`
-- `GITHUB_PAT` — provided by user (unused yet, reserved for git-source deploys)
+## Env vars in /app/backend/.env
+- RAILWAY_TOKEN (account-scoped for GraphQL)
+- RAILWAY_GRAPHQL_URL
+- OWNER_EMAIL
+- GITHUB_PAT (for auto-mirror)
 
 ## Deployed apps
 - Morning Soft® — https://morningsoft-web-production.up.railway.app
-  - Backend: https://morningsoft-api-production.up.railway.app
-  - Admin login: `admin@morningsofttissue.com` / `MorningSoft@2026`

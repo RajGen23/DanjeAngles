@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from starlette.middleware.cors import CORSMiddleware
 
 import railway_client as rw
+import github_client as gh
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -62,6 +63,14 @@ class EnvVarInput(BaseModel):
 
 class RedeployInput(BaseModel):
     pass
+
+
+class ProjectTokenInput(BaseModel):
+    token: str
+
+
+class GithubSyncInput(BaseModel):
+    enabled: bool
 
 
 def _rand_password(n: int = 24) -> str:
@@ -172,10 +181,11 @@ async def run_real_deploy(deployment_id: str, project_local_id: str, zip_path: s
             "framework": framework,
         }})
 
-        # Upload source via CLI
+        # Upload source via CLI (uses per-project token when set)
         await _log(deployment_id, "info", "Uploading source to Railway (railway up)...")
         await _set_progress(deployment_id, 45)
-        ok, out = await rw.railway_up(str(workdir), rw_project_id, rw_service_id, rw_env_id)
+        proj_token = project.get("railway_project_token")
+        ok, out = await rw.railway_up(str(workdir), rw_project_id, rw_service_id, rw_env_id, token=proj_token)
         for line in out.splitlines()[-30:]:
             if line.strip():
                 await _log(deployment_id, "info", line.strip())
@@ -241,6 +251,27 @@ async def run_real_deploy(deployment_id: str, project_local_id: str, zip_path: s
                             "status": "running", "url": final_url,
                             "last_deployed_at": now_iso(),
                         }, "$inc": {"deploy_count": 1}})
+                        # GitHub mirror if enabled + token present
+                        proj_fresh = await db.projects.find_one({"id": project_local_id}, {"_id": 0})
+                        if proj_fresh and proj_fresh.get("github_sync") and os.environ.get("GITHUB_PAT"):
+                            try:
+                                repo_name = f"emergent-hosted-{proj_fresh.get('slug') or slugify(proj_fresh['name'])}"
+                                await _log(deployment_id, "info", f"Mirroring source to GitHub ({repo_name})...")
+                                repo = await gh.ensure_repo(repo_name, private=True,
+                                                            description=f"Auto-mirror for {proj_fresh['name']}")
+                                gh_ok, gh_out = await gh.push_source(
+                                    str(workdir), repo["owner"], repo["name"],
+                                    commit_msg=f"Deploy v{proj_fresh.get('deploy_count', 0) + 1}")
+                                if gh_ok:
+                                    await _log(deployment_id, "ok", f"GitHub mirror updated: {repo['html_url']}")
+                                    await db.projects.update_one({"id": project_local_id}, {"$set": {
+                                        "github_repo_url": repo["html_url"],
+                                        "github_last_push_at": now_iso(),
+                                    }})
+                                else:
+                                    await _log(deployment_id, "error", f"GitHub mirror failed: {gh_out[:400]}")
+                            except Exception as ghe:
+                                await _log(deployment_id, "error", f"GitHub mirror error: {ghe}")
                     else:
                         await _log(deployment_id, "error", f"Build finished with status {st}")
                         await db.deployments.update_one({"id": deployment_id}, {"$set": {
@@ -651,7 +682,41 @@ async def owner():
     except Exception as e:
         ok = False
         name = str(e)
-    return {"email": OWNER_EMAIL, "provider": "Railway", "connected": ok, "detail": name if not ok else None}
+    # GitHub connectivity
+    gh_user = None
+    if os.environ.get("GITHUB_PAT"):
+        try:
+            u = await gh.whoami()
+            gh_user = u.get("login") if u else None
+        except Exception:
+            gh_user = None
+    return {"email": OWNER_EMAIL, "provider": "Railway", "connected": ok,
+            "detail": name if not ok else None,
+            "github_user": gh_user}
+
+
+# ---------------- Per-project settings ----------------
+@api.post("/projects/{pid}/token")
+async def set_project_token(pid: str, body: ProjectTokenInput):
+    project = await db.projects.find_one({"id": pid}, {"_id": 0})
+    if not project:
+        raise HTTPException(404, "Project not found")
+    tok = body.token.strip()
+    if not tok:
+        raise HTTPException(400, "Empty token")
+    await db.projects.update_one({"id": pid}, {"$set": {"railway_project_token": tok}})
+    return {"saved": True}
+
+
+@api.post("/projects/{pid}/github")
+async def toggle_github_sync(pid: str, body: GithubSyncInput):
+    project = await db.projects.find_one({"id": pid}, {"_id": 0})
+    if not project:
+        raise HTTPException(404, "Project not found")
+    if body.enabled and not os.environ.get("GITHUB_PAT"):
+        raise HTTPException(400, "GITHUB_PAT is not configured server-side")
+    await db.projects.update_one({"id": pid}, {"$set": {"github_sync": bool(body.enabled)}})
+    return {"github_sync": bool(body.enabled)}
 
 
 app.include_router(api)
