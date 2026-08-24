@@ -64,6 +64,12 @@ class RedeployInput(BaseModel):
     pass
 
 
+def _rand_password(n: int = 24) -> str:
+    import secrets, string
+    alpha = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alpha) for _ in range(n))
+
+
 # ---------------- Helpers ----------------
 def safe_extract(zip_path: Path, dest: Path) -> None:
     root = dest.resolve()
@@ -307,6 +313,106 @@ async def project_action(pid: str, body: ActionInput):
     new_status = "stopped" if body.action == "stop" else "running"
     await db.projects.update_one({"id": pid}, {"$set": {"status": new_status}})
     return {"id": pid, "status": new_status}
+
+
+# ---------------- Mongo add-on ----------------
+@api.post("/projects/{pid}/mongo")
+async def provision_mongo(pid: str):
+    project = await db.projects.find_one({"id": pid}, {"_id": 0})
+    if not project:
+        raise HTTPException(404, "Project not found")
+    if project.get("mongo_service_id"):
+        raise HTTPException(409, "MongoDB already provisioned for this project")
+    rw_project_id = project.get("railway_project_id")
+    rw_env_id = project.get("railway_env_id")
+    rw_app_service_id = project.get("railway_service_id")
+    if not (rw_project_id and rw_env_id and rw_app_service_id):
+        raise HTTPException(400, "Deploy the app once before adding MongoDB")
+
+    try:
+        # Create mongo service from Docker image
+        mongo_svc = await rw.create_service(rw_project_id, "Mongo", image="mongo:7")
+        mongo_id = mongo_svc["id"]
+        password = _rand_password()
+        creds = {
+            "MONGO_INITDB_ROOT_USERNAME": "root",
+            "MONGO_INITDB_ROOT_PASSWORD": password,
+            "MONGO_URL": f"mongodb://root:{password}@${{{{RAILWAY_PRIVATE_DOMAIN}}}}:27017",
+        }
+        await rw.upsert_variables(rw_project_id, rw_env_id, mongo_id, creds, replace=False, skip_deploys=True)
+        # Persistent volume
+        try:
+            await rw.create_volume(rw_project_id, mongo_id, "/data/db", environment_id=rw_env_id)
+        except Exception as e:
+            logger.warning("volume create failed: %s", e)
+        # Wire MONGO_URL reference into the app service
+        await rw.upsert_variables(rw_project_id, rw_env_id, rw_app_service_id, {
+            "MONGO_URL": "${{Mongo.MONGO_URL}}",
+            "DB_NAME": slugify(project["name"]),
+        }, replace=False, skip_deploys=False)
+        await db.projects.update_one({"id": pid}, {"$set": {
+            "mongo_service_id": mongo_id,
+            "mongo_provisioned_at": now_iso(),
+        }})
+        # Reflect in local env_vars mirror
+        await db.env_vars.update_one(
+            {"project_id": pid, "key": "MONGO_URL"},
+            {"$set": {"project_id": pid, "key": "MONGO_URL", "value": "${{Mongo.MONGO_URL}}", "updated_at": now_iso()}},
+            upsert=True,
+        )
+        await db.env_vars.update_one(
+            {"project_id": pid, "key": "DB_NAME"},
+            {"$set": {"project_id": pid, "key": "DB_NAME", "value": slugify(project["name"]), "updated_at": now_iso()}},
+            upsert=True,
+        )
+        return {"mongo_service_id": mongo_id, "status": "provisioning",
+                "note": "MongoDB is starting up. Your app will get MONGO_URL on next deploy."}
+    except Exception as e:
+        logger.exception("mongo provision failed")
+        raise HTTPException(500, f"Mongo provisioning failed: {e}")
+
+
+@api.delete("/projects/{pid}/mongo")
+async def deprovision_mongo(pid: str):
+    project = await db.projects.find_one({"id": pid}, {"_id": 0})
+    if not project:
+        raise HTTPException(404, "Project not found")
+    mongo_id = project.get("mongo_service_id")
+    if not mongo_id:
+        raise HTTPException(404, "No MongoDB service on this project")
+    try:
+        await rw.delete_service(mongo_id)
+    except Exception as e:
+        logger.warning("mongo service delete failed: %s", e)
+    await db.projects.update_one({"id": pid}, {"$unset": {"mongo_service_id": "", "mongo_provisioned_at": ""}})
+    return {"deleted": True}
+
+
+# ---------------- Deploy history & rollback ----------------
+@api.get("/projects/{pid}/deployments")
+async def project_deployments(pid: str):
+    project = await db.projects.find_one({"id": pid}, {"_id": 0})
+    if not project:
+        raise HTTPException(404, "Project not found")
+    rw_service_id = project.get("railway_service_id")
+    rw_env_id = project.get("railway_env_id")
+    if not (rw_service_id and rw_env_id):
+        return []
+    try:
+        return await rw.list_service_deployments(rw_service_id, rw_env_id, limit=25)
+    except Exception as e:
+        raise HTTPException(500, f"Failed to list deployments: {e}")
+
+
+@api.post("/deployments/{railway_deployment_id}/rollback")
+async def rollback_deployment(railway_deployment_id: str):
+    try:
+        ok = await rw.deployment_rollback(railway_deployment_id)
+    except Exception as e:
+        raise HTTPException(500, f"Rollback failed: {e}")
+    if not ok:
+        raise HTTPException(400, "Rollback rejected by Railway")
+    return {"rolled_back_to": railway_deployment_id}
 
 
 @api.delete("/projects/{pid}")

@@ -91,17 +91,36 @@ async def delete_project(pid: str) -> None:
 
 
 # ---------- Services ----------
-async def create_service(project_id: str, name: str) -> dict:
+async def create_service(project_id: str, name: str,
+                          image: Optional[str] = None) -> dict:
+    inp: dict[str, Any] = {"projectId": project_id, "name": name}
+    if image:
+        inp["source"] = {"image": image}
     d = await gql("""
       mutation($input: ServiceCreateInput!) {
         serviceCreate(input: $input) { id name projectId }
       }
-    """, {"input": {"projectId": project_id, "name": name}})
+    """, {"input": inp})
     return d["serviceCreate"]
 
 
 async def delete_service(service_id: str) -> None:
     await gql("mutation($id: String!) { serviceDelete(id: $id) }", {"id": service_id})
+
+
+async def create_volume(project_id: str, service_id: str, mount_path: str,
+                         environment_id: Optional[str] = None) -> dict:
+    inp: dict[str, Any] = {
+        "projectId": project_id, "serviceId": service_id, "mountPath": mount_path,
+    }
+    if environment_id:
+        inp["environmentId"] = environment_id
+    d = await gql("""
+      mutation($input: VolumeCreateInput!) {
+        volumeCreate(input: $input) { id name }
+      }
+    """, {"input": inp})
+    return d["volumeCreate"]
 
 
 # ---------- Environment variables ----------
@@ -172,15 +191,22 @@ async def get_deployment(deployment_id: str) -> dict:
     return d["deployment"]
 
 
-async def list_service_deployments(service_id: str, environment_id: str, limit: int = 5) -> list[dict]:
+async def list_service_deployments(service_id: str, environment_id: str, limit: int = 20) -> list[dict]:
     d = await gql("""
       query($input: DeploymentListInput!, $first: Int) {
         deployments(input: $input, first: $first) {
-          edges { node { id status url staticUrl createdAt } }
+          edges { node { id status url staticUrl createdAt canRedeploy canRollback meta } }
         }
       }
     """, {"input": {"serviceId": service_id, "environmentId": environment_id}, "first": limit})
     return [e["node"] for e in d["deployments"]["edges"]]
+
+
+async def deployment_rollback(deployment_id: str) -> bool:
+    d = await gql("""
+      mutation($id: String!) { deploymentRollback(id: $id) }
+    """, {"id": deployment_id})
+    return bool(d.get("deploymentRollback"))
 
 
 async def get_build_logs(deployment_id: str, limit: int = 500) -> list[dict]:
