@@ -644,7 +644,7 @@ async def add_domain(body: DomainInput):
     if not (rw_service_id and rw_env_id):
         raise HTTPException(400, "Deploy the project once before attaching a domain")
     try:
-        created = await rw.create_custom_domain(rw_service_id, rw_env_id, hostname)
+        created = await rw.create_custom_domain(project["railway_project_id"], rw_service_id, rw_env_id, hostname)
     except Exception as e:
         raise HTTPException(500, f"Failed to attach: {e}")
     doc = {

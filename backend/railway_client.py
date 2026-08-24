@@ -243,9 +243,10 @@ async def create_service_domain(service_id: str, environment_id: str) -> dict:
     return d["serviceDomainCreate"]
 
 
-async def create_custom_domain(service_id: str, environment_id: str, domain: str,
-                                target_port: Optional[int] = None) -> dict:
-    inp = {"serviceId": service_id, "environmentId": environment_id, "domain": domain}
+async def create_custom_domain(project_id: str, service_id: str, environment_id: str,
+                                domain: str, target_port: Optional[int] = None) -> dict:
+    inp = {"projectId": project_id, "serviceId": service_id,
+           "environmentId": environment_id, "domain": domain}
     if target_port is None:
         target_port = 3000
     inp["targetPort"] = target_port
