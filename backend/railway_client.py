@@ -1,0 +1,305 @@
+"""Railway.app GraphQL + CLI integration.
+
+Exposes a thin async client for the queries/mutations we need:
+- me/projects lookup
+- create/list/delete Railway projects & services
+- read/write env variables
+- trigger deployments (via `railway up` CLI) and stream logs
+- generate railway.app subdomain + attach custom domains
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import os
+import shutil
+import subprocess
+from pathlib import Path
+from typing import Any, Optional
+
+import httpx
+
+log = logging.getLogger(__name__)
+
+RAILWAY_URL = os.environ.get("RAILWAY_GRAPHQL_URL", "https://backboard.railway.app/graphql/v2")
+
+
+def _token() -> str:
+    tok = os.environ.get("RAILWAY_TOKEN")
+    if not tok:
+        raise RuntimeError("RAILWAY_TOKEN not configured")
+    return tok
+
+
+class RailwayError(RuntimeError):
+    pass
+
+
+async def gql(query: str, variables: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    async with httpx.AsyncClient(timeout=60) as c:
+        r = await c.post(
+            RAILWAY_URL,
+            headers={"Authorization": f"Bearer {_token()}", "Content-Type": "application/json"},
+            json={"query": query, "variables": variables or {}},
+        )
+    r.raise_for_status()
+    body = r.json()
+    if body.get("errors"):
+        raise RailwayError(json.dumps(body["errors"]))
+    return body["data"]
+
+
+# ---------- Projects ----------
+async def list_projects() -> list[dict]:
+    d = await gql("""
+      query { projects { edges { node { id name createdAt
+        services { edges { node { id name } } }
+        environments { edges { node { id name } } }
+      } } } }
+    """)
+    return [e["node"] for e in d["projects"]["edges"]]
+
+
+async def get_project(pid: str) -> dict:
+    d = await gql("""
+      query($id: String!) { project(id: $id) { id name createdAt
+        services { edges { node { id name serviceInstances { edges { node {
+          id domains { serviceDomains { domain } customDomains { domain status } }
+          latestDeployment { id status url staticUrl }
+        } } } } } }
+        environments { edges { node { id name } } }
+      } }
+    """, {"id": pid})
+    return d["project"]
+
+
+async def create_project(name: str) -> dict:
+    d = await gql("""
+      mutation($input: ProjectCreateInput!) {
+        projectCreate(input: $input) {
+          id name
+          environments { edges { node { id name } } }
+        }
+      }
+    """, {"input": {"name": name, "defaultEnvironmentName": "production"}})
+    return d["projectCreate"]
+
+
+async def delete_project(pid: str) -> None:
+    await gql("mutation($id: String!) { projectDelete(id: $id) }", {"id": pid})
+
+
+# ---------- Services ----------
+async def create_service(project_id: str, name: str) -> dict:
+    d = await gql("""
+      mutation($input: ServiceCreateInput!) {
+        serviceCreate(input: $input) { id name projectId }
+      }
+    """, {"input": {"projectId": project_id, "name": name}})
+    return d["serviceCreate"]
+
+
+async def delete_service(service_id: str) -> None:
+    await gql("mutation($id: String!) { serviceDelete(id: $id) }", {"id": service_id})
+
+
+# ---------- Environment variables ----------
+async def upsert_variables(project_id: str, environment_id: str, service_id: str,
+                            variables: dict[str, str], replace: bool = False,
+                            skip_deploys: bool = True) -> None:
+    await gql("""
+      mutation($input: VariableCollectionUpsertInput!) { variableCollectionUpsert(input: $input) }
+    """, {"input": {
+        "projectId": project_id,
+        "environmentId": environment_id,
+        "serviceId": service_id,
+        "variables": variables,
+        "replace": replace,
+        "skipDeploys": skip_deploys,
+    }})
+
+
+async def delete_variable(project_id: str, environment_id: str, service_id: str, name: str) -> None:
+    await gql("""
+      mutation($input: VariableDeleteInput!) { variableDelete(input: $input) }
+    """, {"input": {
+        "projectId": project_id, "environmentId": environment_id,
+        "serviceId": service_id, "name": name,
+    }})
+
+
+async def get_variables(project_id: str, environment_id: str, service_id: str) -> dict:
+    d = await gql("""
+      query($projectId: String!, $environmentId: String!, $serviceId: String!) {
+        variables(projectId: $projectId, environmentId: $environmentId, serviceId: $serviceId)
+      }
+    """, {"projectId": project_id, "environmentId": environment_id, "serviceId": service_id})
+    return d.get("variables") or {}
+
+
+# ---------- Deployments ----------
+async def deploy_service(service_id: str, environment_id: str, commit_sha: Optional[str] = None) -> str:
+    args = {"serviceId": service_id, "environmentId": environment_id}
+    if commit_sha:
+        args["commitSha"] = commit_sha
+    d = await gql("""
+      mutation($serviceId: String!, $environmentId: String!, $commitSha: String) {
+        serviceInstanceDeployV2(serviceId: $serviceId, environmentId: $environmentId, commitSha: $commitSha)
+      }
+    """, args)
+    return d["serviceInstanceDeployV2"]
+
+
+async def redeploy_service(service_id: str, environment_id: str) -> str:
+    d = await gql("""
+      mutation($serviceId: String!, $environmentId: String!) {
+        serviceInstanceRedeploy(serviceId: $serviceId, environmentId: $environmentId)
+      }
+    """, {"serviceId": service_id, "environmentId": environment_id})
+    return d["serviceInstanceRedeploy"]
+
+
+async def get_deployment(deployment_id: str) -> dict:
+    d = await gql("""
+      query($id: String!) {
+        deployment(id: $id) {
+          id status url staticUrl createdAt canRedeploy
+          service { id name }
+        }
+      }
+    """, {"id": deployment_id})
+    return d["deployment"]
+
+
+async def list_service_deployments(service_id: str, environment_id: str, limit: int = 5) -> list[dict]:
+    d = await gql("""
+      query($input: DeploymentListInput!, $first: Int) {
+        deployments(input: $input, first: $first) {
+          edges { node { id status url staticUrl createdAt } }
+        }
+      }
+    """, {"input": {"serviceId": service_id, "environmentId": environment_id}, "first": limit})
+    return [e["node"] for e in d["deployments"]["edges"]]
+
+
+async def get_build_logs(deployment_id: str, limit: int = 500) -> list[dict]:
+    d = await gql("""
+      query($deploymentId: String!, $limit: Int) {
+        buildLogs(deploymentId: $deploymentId, limit: $limit) {
+          timestamp message severity
+        }
+      }
+    """, {"deploymentId": deployment_id, "limit": limit})
+    return d.get("buildLogs") or []
+
+
+async def get_runtime_logs(deployment_id: str, limit: int = 200) -> list[dict]:
+    d = await gql("""
+      query($deploymentId: String!, $limit: Int) {
+        deploymentLogs(deploymentId: $deploymentId, limit: $limit) {
+          timestamp message severity
+        }
+      }
+    """, {"deploymentId": deployment_id, "limit": limit})
+    return d.get("deploymentLogs") or []
+
+
+# ---------- Domains ----------
+async def create_service_domain(service_id: str, environment_id: str) -> dict:
+    d = await gql("""
+      mutation($serviceId: String!, $environmentId: String!) {
+        serviceDomainCreate(input: {serviceId: $serviceId, environmentId: $environmentId}) {
+          id domain
+        }
+      }
+    """, {"serviceId": service_id, "environmentId": environment_id})
+    return d["serviceDomainCreate"]
+
+
+async def create_custom_domain(service_id: str, environment_id: str, domain: str,
+                                target_port: Optional[int] = None) -> dict:
+    inp = {"serviceId": service_id, "environmentId": environment_id, "domain": domain}
+    if target_port:
+        inp["targetPort"] = target_port
+    d = await gql("""
+      mutation($input: CustomDomainCreateInput!) {
+        customDomainCreate(input: $input) {
+          id domain status { dnsRecords { hostlabel type value } }
+        }
+      }
+    """, {"input": inp})
+    return d["customDomainCreate"]
+
+
+async def get_custom_domain_status(domain_id: str) -> dict:
+    d = await gql("""
+      query($id: String!) {
+        customDomain(id: $id) {
+          id domain status { dnsRecords { hostlabel type value currentValue status } }
+        }
+      }
+    """, {"id": domain_id})
+    return d["customDomain"]
+
+
+async def delete_custom_domain(domain_id: str) -> None:
+    await gql("mutation($id: String!) { customDomainDelete(id: $id) }", {"id": domain_id})
+
+
+# ---------- CLI upload via `railway up` ----------
+async def railway_up(source_dir: str, project_id: str, service_id: str,
+                     environment_id: str) -> tuple[bool, str]:
+    """Runs `railway up` in a subprocess. Streams no logs (uses --detach).
+    Returns (ok, combined_output)."""
+    env = os.environ.copy()
+    env["RAILWAY_TOKEN"] = _token()
+    cmd = [
+        "railway", "up", source_dir,
+        "--detach", "--ci",
+        "--service", service_id,
+    ]
+    log.info("running: %s", " ".join(cmd))
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        cwd=source_dir,
+        env=env,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    try:
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=600)
+    except asyncio.TimeoutError:
+        proc.kill()
+        return False, "Deployment timed out after 10 minutes"
+    output = (stdout or b"").decode(errors="replace")
+    return proc.returncode == 0, output
+
+
+def ensure_railway_config(source_dir: Path, framework: str) -> None:
+    """Write a railway.json for Nixpacks if not present."""
+    cfg = source_dir / "railway.json"
+    if cfg.exists():
+        return
+    build = {"builder": "NIXPACKS"}
+    if framework == "static-react":
+        # For a pre-built React app served as static
+        build["buildCommand"] = "yarn install && yarn build || npm install && npm run build"
+    payload = {
+        "$schema": "https://railway.com/railway.schema.json",
+        "build": build,
+        "deploy": {"restartPolicyType": "ON_FAILURE", "restartPolicyMaxRetries": 3},
+    }
+    cfg.write_text(json.dumps(payload, indent=2))
+
+
+def detect_framework(source_dir: Path) -> str:
+    pkg = source_dir / "package.json"
+    req = source_dir / "requirements.txt"
+    if pkg.exists() and not req.exists():
+        return "node"
+    if req.exists() and not pkg.exists():
+        return "python"
+    if pkg.exists() and req.exists():
+        return "fullstack"
+    return "unknown"

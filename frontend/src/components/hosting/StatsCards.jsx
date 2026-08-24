@@ -23,8 +23,8 @@ export default function StatsCards({ stats }) {
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6" data-testid="stats-grid">
       <Card icon={Zap} label="Apps Running" value={stats ? stats.apps_running : "—"} sub={stats ? `of ${stats.total_projects} projects` : ""} delay={0} testId="stat-apps-running" />
       <Card icon={Rocket} label="Deployments" value={stats ? stats.total_deployments : "—"} sub="all time" delay={0.05} testId="stat-deployments" />
-      <Card icon={Activity} label="Uptime" value={stats ? `${stats.uptime_pct}%` : "—"} sub="last 30 days" delay={0.1} testId="stat-uptime" />
-      <Card icon={HardDrive} label="Storage" value={stats ? `${stats.storage_mb} MB` : "—"} sub="of 25 GB used" delay={0.15} testId="stat-storage" />
+      <Card icon={Activity} label="Uptime" value={stats ? `${stats.uptime_pct}%` : "—"} sub="Railway SLA" delay={0.1} testId="stat-uptime" />
+      <Card icon={HardDrive} label="Storage" value={stats ? `${stats.storage_mb} MB` : "—"} sub="uploaded archives" delay={0.15} testId="stat-storage" />
     </div>
   );
 }

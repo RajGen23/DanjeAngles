@@ -8,21 +8,26 @@ import ProjectsList from "@/components/hosting/ProjectsList";
 import DeployPanel from "@/components/hosting/DeployPanel";
 import ResourceCharts from "@/components/hosting/ResourceCharts";
 import DomainsPanel from "@/components/hosting/DomainsPanel";
+import EnvVarsPanel from "@/components/hosting/EnvVarsPanel";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 function App() {
   const [stats, setStats] = useState(null);
   const [projects, setProjects] = useState([]);
+  const [owner, setOwner] = useState(null);
+  const [envProject, setEnvProject] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [s, p] = await Promise.all([
+      const [s, p, o] = await Promise.all([
         axios.get(`${API}/stats`),
         axios.get(`${API}/projects`),
+        axios.get(`${API}/owner`),
       ]);
       setStats(s.data);
       setProjects(p.data);
+      setOwner(o.data);
     } catch (e) {
       console.error("refresh failed", e);
     }
@@ -30,6 +35,8 @@ function App() {
 
   useEffect(() => {
     refresh();
+    const t = setInterval(refresh, 6000);
+    return () => clearInterval(t);
   }, [refresh]);
 
   return (
@@ -44,9 +51,12 @@ function App() {
             <span className="font-heading font-bold tracking-tight text-[15px]">selfhost</span>
             <span className="text-neutral-400 text-[15px] font-light">/ control panel</span>
           </div>
-          <div className="flex items-center gap-2 text-xs text-neutral-500 font-mono">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            vps-01 · online
+          <div className="flex items-center gap-3 text-xs text-neutral-500 font-mono">
+            {owner?.email && <span className="hidden sm:inline">{owner.email}</span>}
+            <span className={`flex items-center gap-1.5 ${owner?.connected ? "text-neutral-500" : "text-red-500"}`} data-testid="railway-status">
+              <span className={`w-1.5 h-1.5 rounded-full ${owner?.connected ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
+              {owner?.connected ? "Railway · connected" : "Railway · offline"}
+            </span>
           </div>
         </div>
       </nav>
@@ -54,23 +64,24 @@ function App() {
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-6" data-testid="dashboard-main">
         <div>
           <h1 className="font-heading text-3xl font-light tracking-tight">Hosting Overview</h1>
-          <p className="text-sm text-neutral-500 mt-1">Deploy and manage your Emergent apps on your own server.</p>
+          <p className="text-sm text-neutral-500 mt-1">Deploy your Emergent apps to Railway with real URLs, env vars, and custom domains.</p>
         </div>
 
         <StatsCards stats={stats} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            <ProjectsList projects={projects} api={API} onChange={refresh} />
-            <DeployPanel api={API} onDeployed={refresh} />
+            <ProjectsList projects={projects} api={API} onChange={refresh} onOpenEnv={setEnvProject} />
+            <DeployPanel api={API} onDeployed={refresh} projects={projects} />
           </div>
           <div className="space-y-6">
             <DomainsPanel api={API} projects={projects} />
+            <ResourceCharts api={API} />
           </div>
         </div>
-
-        <ResourceCharts api={API} />
       </main>
+
+      {envProject && <EnvVarsPanel api={API} project={envProject} onClose={() => setEnvProject(null)} />}
     </div>
   );
 }
