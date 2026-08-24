@@ -246,12 +246,16 @@ async def create_service_domain(service_id: str, environment_id: str) -> dict:
 async def create_custom_domain(service_id: str, environment_id: str, domain: str,
                                 target_port: Optional[int] = None) -> dict:
     inp = {"serviceId": service_id, "environmentId": environment_id, "domain": domain}
-    if target_port:
-        inp["targetPort"] = target_port
+    if target_port is None:
+        target_port = 3000
+    inp["targetPort"] = target_port
     d = await gql("""
       mutation($input: CustomDomainCreateInput!) {
         customDomainCreate(input: $input) {
-          id domain status { dnsRecords { hostlabel type value } }
+          id domain status {
+            certificateStatus verified
+            dnsRecords { hostlabel recordType requiredValue currentValue status purpose zone fqdn }
+          }
         }
       }
     """, {"input": inp})
@@ -262,7 +266,10 @@ async def get_custom_domain_status(domain_id: str) -> dict:
     d = await gql("""
       query($id: String!) {
         customDomain(id: $id) {
-          id domain status { dnsRecords { hostlabel type value currentValue status } }
+          id domain status {
+            certificateStatus verified
+            dnsRecords { hostlabel recordType requiredValue currentValue status purpose zone fqdn }
+          }
         }
       }
     """, {"id": domain_id})

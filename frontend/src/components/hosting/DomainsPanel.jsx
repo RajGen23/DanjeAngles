@@ -138,15 +138,18 @@ export default function DomainsPanel({ api, projects }) {
               </div>
               {expanded === d.id && d.dns_records && d.dns_records.length > 0 && (
                 <div className="px-3 pb-3 border-t border-neutral-100 pt-2 space-y-1.5" data-testid={`dns-records-${d.hostname}`}>
-                  <p className="text-[11px] text-neutral-500">Add these DNS records at your provider:</p>
+                  <p className="text-[11px] text-neutral-500">Add these DNS records at your domain provider (Cloudflare / Namecheap / GoDaddy):</p>
                   {d.dns_records.map((r, i) => (
                     <div key={i} className="bg-neutral-50 border border-neutral-200 rounded-sm p-2 text-[11px] font-mono grid grid-cols-[auto_1fr_auto] gap-2 items-center">
-                      <span className="text-neutral-500">{r.type}</span>
+                      <span className="text-neutral-500 font-semibold uppercase">{r.recordType}</span>
                       <div className="flex flex-col min-w-0">
                         <span className="truncate"><span className="text-neutral-400">host:</span> {r.hostlabel || "@"}</span>
-                        <span className="truncate"><span className="text-neutral-400">value:</span> {r.value}</span>
+                        <span className="truncate"><span className="text-neutral-400">value:</span> {r.requiredValue}</span>
+                        {r.currentValue && r.currentValue !== r.requiredValue && (
+                          <span className="truncate text-red-600"><span className="text-neutral-400">current:</span> {r.currentValue}</span>
+                        )}
                       </div>
-                      <button onClick={() => copy(r.value)} className="text-neutral-400 hover:text-[#FF4400]" title="Copy value">
+                      <button onClick={() => copy(r.requiredValue)} className="text-neutral-400 hover:text-[#FF4400]" title="Copy value">
                         <Copy size={12} strokeWidth={1.5} />
                       </button>
                     </div>
