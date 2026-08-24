@@ -1,0 +1,26 @@
+{
+  "summary": "Verified the auto-heal fix in GET /api/projects for the selfhost control panel. Wrote /app/backend/tests/test_autoheal.py with 10 tests — all pass. Core test forces morningsoft-api mongo doc to status='deploying', then calls GET /api/projects and asserts (a) API response returns status='running', (b) mongo document was updated to 'running'. This confirms the new auto-heal logic queries Railway's list_service_deployments and flips the local record when Railway shows SUCCESS. Regression checks on env, deployments, delete, redeploy, github, urls, and mongo-deprovision endpoints all return expected HTTP codes. Frontend Playwright verification confirms both morningsoft-* rows render with status pill 'running' and the ↻ Refetch button [data-testid=refetch-btn-morningsoft-api] & [data-testid=refetch-btn-morningsoft-web] are present and NOT disabled (is_disabled()==False). Note: the class string contains 'disabled:opacity-30' which is a Tailwind conditional utility — it is present in the raw class attribute but only applies visually when the disabled attribute is set (verified in screenshot the icons show the emerald 'active' green border and are visually enabled).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard console", "issues": ["React hydration warning: <span> cannot be a child of <option> in DeployPanel.jsx select — pre-existing, unrelated to auto-heal fix, cosmetic only"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_autoheal.py", "/app/test_reports/pytest/autoheal_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py list_projects() auto-heal is O(N) sequential Railway calls per GET /api/projects; fine for 2 stuck projects but if many projects are stuck this could add seconds of latency to every dashboard poll. Consider parallelizing with asyncio.gather or caching last-check timestamp per project.",
+    "Auto-heal only fires on GET /api/projects — a project stuck in 'deploying' won't self-heal on GET /api/deployments or on the individual project detail views (though those don't exist yet). Acceptable given ProjectsList is the primary UI.",
+    "In server.py line 356: latest.get('url') from list_service_deployments — the GraphQL query in list_service_deployments (railway_client.py:194) selects url/staticUrl, so this is correct. Good.",
+    "DeployPanel.jsx renders <span> inside <option> causing React hydration warnings (pre-existing bug, not in scope)."
+  ],
+  "updated_files": ["/app/backend/tests/test_autoheal.py"],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100%"},
+  "seed_data_creation": "None. Test uses existing morningsoft-api and morningsoft-web pre-seeded projects. Test transiently flips morningsoft-api.status to 'deploying' and verifies auto-heal restores it to 'running'; no cleanup needed since auto-heal itself restores the correct state.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Auto-heal in GET /api/projects works correctly against real Railway API. Test uses dotenv to load REACT_APP_BACKEND_URL from /app/frontend/.env. Pytest addopts must be overridden with -o addopts='' because pytest.ini forces xdist which conflicts with async event loop reuse in the auto-heal test. Both morningsoft projects have emergent_source_url set so the Refetch icon is visible on both rows.",
+  "rca of the issue": "Original bug: run_real_deploy polling loop terminated at ~9 min (180 * 3s sleeps) while Railway builds can occasionally take longer, leaving mongo projects.status='deploying' permanently — which disabled the Refetch button (frontend condition p.status==='deploying'). Fix (verified): list_projects handler now queries rw.list_service_deployments(limit=1) for any project stuck in 'deploying' and reconciles local mongo status to 'running' (SUCCESS) or 'failed' (FAILED/CRASHED) each time the dashboard polls the projects list. Reproduction confirmed by forcing status='deploying' in mongo, then a single GET /api/projects call flips it back to 'running' with the fresh URL, and mongo is persisted."
+}

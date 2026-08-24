@@ -335,7 +335,36 @@ async def stats():
 # ---------------- Projects ----------------
 @api.get("/projects")
 async def list_projects():
-    return await db.projects.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    projects = await db.projects.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    # Auto-heal: any project stuck in 'deploying' but Railway shows a terminal state
+    # (this happens when our poll loop times out before the build finishes)
+    for p in projects:
+        if p.get("status") != "deploying":
+            continue
+        svc, env = p.get("railway_service_id"), p.get("railway_env_id")
+        if not (svc and env):
+            continue
+        try:
+            deps = await rw.list_service_deployments(svc, env, limit=1)
+        except Exception:
+            continue
+        if not deps:
+            continue
+        latest = deps[0]
+        st = (latest.get("status") or "").upper()
+        if st == "SUCCESS":
+            url = latest.get("url") or latest.get("staticUrl")
+            if url and not url.startswith("http"):
+                url = f"https://{url}"
+            upd = {"status": "running", "last_deployed_at": now_iso()}
+            if url:
+                upd["url"] = url
+            await db.projects.update_one({"id": p["id"]}, {"$set": upd})
+            p.update(upd)
+        elif st in ("FAILED", "CRASHED"):
+            await db.projects.update_one({"id": p["id"]}, {"$set": {"status": "failed"}})
+            p["status"] = "failed"
+    return projects
 
 
 @api.post("/projects/{pid}/action")
