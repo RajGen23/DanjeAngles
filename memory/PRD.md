@@ -1,54 +1,48 @@
 # PRD — selfhost: Self-Hosting Control Panel (Railway-backed)
 
 ## Original Problem Statement
-Own hosting control panel for Emergent app exports — deploy without paying per-app.
+Own hosting control panel for Emergent app exports — deploy without paying per-app on Emergent.
 
 ## Architecture
 ```
 Browser  →  FastAPI panel  →  MongoDB (panel state)
-                 ├─►  Railway GraphQL   (account token — projects, services, envs, domains, deployments, rollback)
-                 ├─►  Railway CLI       (project-scoped token — `railway up` source uploads)
-                 └─►  GitHub REST + git (GITHUB_PAT — mirror source to per-project repo on each deploy)
+                 ├─►  Railway GraphQL       (account token — projects/services/envs/domains/deploys)
+                 ├─►  Railway CLI           (project-scoped token — `railway up` source uploads)
+                 ├─►  GitHub REST + git     (GITHUB_PAT — mirror source to per-project repo)
+                 └─►  Emergent code-server  (user-provided URL+password — pull latest workspace via /vscode-remote-resource)
 ```
 
-## Implemented
-### Session 1 — Real Railway hosting
-- POST /api/deploy with real `railway up` and streamed logs
-- Env vars per project via `variableCollectionUpsert`
-- Custom domains via `customDomainCreate` with live DNS record UI
-- Owner/connectivity meta
+## Implemented (sessions 1–6)
+### Core
+- POST /api/deploy — real `railway up` + streamed logs
+- Env vars per project (GET/POST/DELETE `/api/projects/{id}/env`)
+- Custom domains (create + auto DNS records display) — fixed missing `projectId` + `targetPort` bugs
+- One-click Mongo add-on (`mongo:7` + volume + `${{Mongo.MONGO_URL}}` reference)
+- Deploy history + rollback (`deploymentRollback`)
+- Owner/connectivity meta (Railway + GitHub user)
+- Per-project settings modal: Railway token, GitHub sync toggle, Public URLs & admin, Emergent source
 
-### Session 2 — Mongo add-on + Deploy history
-- One-click Mongo (`mongo:7` service + `/data/db` volume + `${{Mongo.MONGO_URL}}` reference)
-- Deploy history modal + `deploymentRollback`
+### Deployed Morning Soft®
+- 3-service Railway project (backend/mongo/frontend)
+- Custom domain https://www.brandjunction.xyz — Let's Encrypt SSL ✅
+- Fallback URLs live at *.up.railway.app ✅
+- Admin: `admin@morningsofttissue.com` / `MorningSoft@2026`
+- Frontend Dockerfile hardcodes `serve -l 3000` to match `targetPort=3000`
 
-### Session 3 — Morning Soft deploy
-- Fetched full workspace via `/vscode-remote-resource` (auth cookie route)
-- Dockerfiles for backend + frontend (emergentintegrations custom pip index)
-- Deployed 3 Railway services in one project; verified end-to-end
-
-### Session 4 — Redeploy + GitHub sync
-- `railway_up` now uses per-project token override
-- `github_client.py` push each deploy to `emergent-hosted-<slug>` repo
-- Frontend: `ProjectSettingsModal` (gear icon) for token / GitHub / URLs
-
-### Session 5 — Project row URLs + Custom domain live
-- `frontend_url`, `admin_email`, `admin_password` fields + `POST /api/projects/{id}/urls`
-- ProjectsList row shows `STORE / API / ADMIN` inline
-- Attached `www.brandjunction.xyz` to `morningsoft-web` (fixed missing `projectId` in `customDomainCreate` payload; Railway also required `targetPort`)
-- Fixed 502 on customDomain by hardcoding `serve -l 3000` in Dockerfile so container port matches `targetPort=3000`
-- `www.brandjunction.xyz` is LIVE with valid Let's Encrypt SSL, HTTP 200
-
-## Backlog
-- **P1** Fix serviceDomain targetPort so `morningsoft-web-production.up.railway.app` returns 200 again (needs `serviceDomainUpdate` mutation, waiting for rate-limit clear)
-- **P1** Live runtime logs tab (`deploymentLogs` query)
-- **P2** One-click "Refetch from Emergent" button — pulls latest source from code-server + redeploys
-- **P2** Cost meter per service (Railway metrics API)
-- **P2** Auth for the panel itself
+### One-Click Refetch (new)
+- `/app/backend/emergent_fetcher.py` — BFS fetch of code-server workspace via `/vscode-remote-resource`, following JS `@/` alias + relative + Python module imports
+- POST `/api/projects/{id}/emergent-source` — save code-server URL/password/subdir + cached Dockerfile + railway.json templates
+- POST `/api/projects/{id}/refetch` — auth → fetch → inject cached Dockerfile → zip → deploy
+- Settings modal "Emergent source" section
+- ProjectsList ↻ (green) button visible when configured, spins during refetch
+- Both morningsoft projects pre-configured with subdir (backend / frontend) + Dockerfile/railway.json templates
+- **Current status**: fetcher live-tested against Emergent workspace — password `f69d08a5` since rotated by Emergent, needs fresh password paste through the settings modal to work
 
 ## Files
-- Backend: `server.py`, `railway_client.py`, `github_client.py`
+- Backend: `server.py`, `railway_client.py`, `github_client.py`, `emergent_fetcher.py`
 - Frontend: `App.js`, `components/hosting/{DeployPanel,DomainsPanel,EnvVarsPanel,DeployHistoryPanel,ProjectSettingsModal,ProjectsList,ResourceCharts,StatsCards}.jsx`
 
-## Deployed
-- Morning Soft®: https://www.brandjunction.xyz — SSL ✅, backend on Railway ✅, Mongo add-on ✅
+## Backlog
+- P1 Live runtime logs tab (`deploymentLogs` query)
+- P2 Cost meter per service (Railway metrics)
+- P2 Auth (JWT) for the panel itself

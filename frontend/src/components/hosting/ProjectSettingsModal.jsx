@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
-import { ExternalLink, Github, Globe, KeyRound, User, X } from "lucide-react";
+import { ExternalLink, Github, Globe, KeyRound, RefreshCw, User, X } from "lucide-react";
 
 export default function ProjectSettingsModal({ api, project, ghUser, onClose, onChange }) {
   const [token, setToken] = useState("");
@@ -10,6 +10,9 @@ export default function ProjectSettingsModal({ api, project, ghUser, onClose, on
   const [frontendUrl, setFrontendUrl] = useState(project?.frontend_url || "");
   const [adminEmail, setAdminEmail] = useState(project?.admin_email || "");
   const [adminPassword, setAdminPassword] = useState(project?.admin_password || "");
+  const [emUrl, setEmUrl] = useState(project?.emergent_source_url || "");
+  const [emPwd, setEmPwd] = useState("");
+  const [emSubdir, setEmSubdir] = useState(project?.emergent_subdir || "");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -17,6 +20,8 @@ export default function ProjectSettingsModal({ api, project, ghUser, onClose, on
     setFrontendUrl(project?.frontend_url || "");
     setAdminEmail(project?.admin_email || "");
     setAdminPassword(project?.admin_password || "");
+    setEmUrl(project?.emergent_source_url || "");
+    setEmSubdir(project?.emergent_subdir || "");
   }, [project]);
 
   const saveToken = useCallback(async () => {
@@ -58,6 +63,26 @@ export default function ProjectSettingsModal({ api, project, ghUser, onClose, on
       toast.error(e.response?.data?.detail || "Save failed");
     } finally { setSaving(false); }
   }, [api, project, frontendUrl, adminEmail, adminPassword, onChange]);
+
+  const saveEmergent = useCallback(async () => {
+    if (!emUrl.trim()) return toast.error("Emergent URL required");
+    if (!emPwd && !project.emergent_source_url) return toast.error("Password required for new source");
+    setSaving(true);
+    try {
+      const payload = {
+        url: emUrl.trim(),
+        password: emPwd || project.emergent_source_password || "",
+        workspace_root: "/app",
+        subdir: emSubdir.trim() || null,
+      };
+      await axios.post(`${api}/projects/${project.id}/emergent-source`, payload);
+      toast.success("Emergent source saved — Refetch button now available");
+      setEmPwd("");
+      onChange();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Save failed");
+    } finally { setSaving(false); }
+  }, [api, project, emUrl, emPwd, emSubdir, onChange]);
 
   if (!project) return null;
   const hasToken = !!project.railway_project_token;
@@ -134,6 +159,50 @@ export default function ProjectSettingsModal({ api, project, ghUser, onClose, on
                   className="w-full px-3 py-2 bg-[#FF4400] hover:bg-[#E63D00] text-white text-sm rounded-sm disabled:opacity-50 transition-colors"
                 >
                   Save URLs &amp; admin
+                </button>
+              </div>
+            </div>
+
+            {/* Emergent source (for one-click Refetch) */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <RefreshCw size={13} strokeWidth={1.75} className="text-neutral-400" />
+                <span className="text-xs uppercase tracking-wider text-neutral-500">Emergent source</span>
+                {project.emergent_source_url && <span className="text-[10px] uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5">connected</span>}
+              </div>
+              <p className="text-[11px] text-neutral-500 leading-relaxed mb-2">
+                When set, the ↻ Refetch button on this project pulls the latest source from your Emergent code-server and redeploys — no manual zip export.
+              </p>
+              <div className="space-y-2">
+                <input
+                  value={emUrl}
+                  onChange={(e) => setEmUrl(e.target.value)}
+                  placeholder="https://vscode-xxx.preview.emergentagent.com"
+                  data-testid="emergent-url-input"
+                  className="w-full border border-neutral-200 rounded-sm px-3 py-2 text-sm font-mono focus:outline-none focus-visible:ring-1 focus-visible:ring-[#FF4400] bg-white"
+                />
+                <input
+                  type="password"
+                  value={emPwd}
+                  onChange={(e) => setEmPwd(e.target.value)}
+                  placeholder={project.emergent_source_url ? "•••• (paste to replace)" : "code-server password"}
+                  data-testid="emergent-pwd-input"
+                  className="w-full border border-neutral-200 rounded-sm px-3 py-2 text-sm font-mono focus:outline-none focus-visible:ring-1 focus-visible:ring-[#FF4400] bg-white"
+                />
+                <input
+                  value={emSubdir}
+                  onChange={(e) => setEmSubdir(e.target.value)}
+                  placeholder="subdir (backend / frontend, blank for whole workspace)"
+                  data-testid="emergent-subdir-input"
+                  className="w-full border border-neutral-200 rounded-sm px-3 py-2 text-sm font-mono focus:outline-none focus-visible:ring-1 focus-visible:ring-[#FF4400] bg-white"
+                />
+                <button
+                  onClick={saveEmergent}
+                  disabled={saving}
+                  data-testid="save-emergent-btn"
+                  className="w-full px-3 py-2 bg-neutral-900 hover:bg-neutral-700 text-white text-sm rounded-sm disabled:opacity-50 transition-colors"
+                >
+                  Save Emergent source
                 </button>
               </div>
             </div>

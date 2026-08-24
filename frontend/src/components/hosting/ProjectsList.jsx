@@ -2,7 +2,7 @@ import { useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
-import { Database, ExternalLink, Github, History, KeyRound, RotateCw, Settings, Trash2, Zap } from "lucide-react";
+import { Database, ExternalLink, Github, History, KeyRound, RefreshCw, RotateCw, Settings, Trash2, Zap } from "lucide-react";
 
 const STATUS_STYLES = {
   running: "bg-emerald-100 text-emerald-800",
@@ -39,6 +39,20 @@ export default function ProjectsList({ projects, api, onChange, onOpenEnv, onOpe
       onChange();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Redeploy failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const refetch = async (p) => {
+    if (!window.confirm(`Refetch latest source from Emergent and deploy '${p.name}'? Takes ~2-3 minutes.`)) return;
+    setBusy(p.id + "refetch");
+    try {
+      await axios.post(`${api}/projects/${p.id}/refetch`);
+      toast.success(`Refetching latest from Emergent → deploying...`);
+      onChange();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Refetch failed");
     } finally {
       setBusy(null);
     }
@@ -187,6 +201,17 @@ export default function ProjectsList({ projects, api, onChange, onOpenEnv, onOpe
                 >
                   {p.status === "deploying" ? <Zap size={14} strokeWidth={1.5} className="animate-pulse text-amber-500" /> : <RotateCw size={14} strokeWidth={1.5} />}
                 </IconBtn>
+                {p.emergent_source_url && (
+                  <IconBtn
+                    title="Refetch latest from Emergent & deploy"
+                    onClick={() => refetch(p)}
+                    disabled={busy === p.id + "refetch" || p.status === "deploying"}
+                    testId={`refetch-btn-${p.name}`}
+                    active={true}
+                  >
+                    <RefreshCw size={14} strokeWidth={1.5} className={busy === p.id + "refetch" ? "animate-spin" : ""} />
+                  </IconBtn>
+                )}
                 <IconBtn title="Delete project" onClick={() => remove(p)} disabled={busy} testId={`delete-btn-${p.name}`}>
                   <Trash2 size={14} strokeWidth={1.5} />
                 </IconBtn>

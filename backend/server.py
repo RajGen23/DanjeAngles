@@ -19,6 +19,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 import railway_client as rw
 import github_client as gh
+import emergent_fetcher as ef
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -77,6 +78,15 @@ class ProjectUrlsInput(BaseModel):
     frontend_url: Optional[str] = None
     admin_email: Optional[str] = None
     admin_password: Optional[str] = None
+
+
+class EmergentSourceInput(BaseModel):
+    url: str
+    password: str
+    workspace_root: str = "/app"
+    subdir: Optional[str] = None  # "backend" or "frontend" for split deploys
+    dockerfile: Optional[str] = None
+    railway_json: Optional[str] = None
 
 
 def _rand_password(n: int = 24) -> str:
@@ -740,6 +750,80 @@ async def set_project_urls(pid: str, body: ProjectUrlsInput):
     if upd:
         await db.projects.update_one({"id": pid}, {"$set": upd})
     return {"saved": True, "updated": list(upd.keys())}
+
+
+@api.post("/projects/{pid}/emergent-source")
+async def set_emergent_source(pid: str, body: EmergentSourceInput):
+    project = await db.projects.find_one({"id": pid}, {"_id": 0})
+    if not project:
+        raise HTTPException(404, "Project not found")
+    src = {
+        "emergent_source_url": body.url.strip().rstrip("/"),
+        "emergent_source_password": body.password,
+        "emergent_workspace_root": body.workspace_root or "/app",
+        "emergent_subdir": (body.subdir.strip() if body.subdir else None) or None,
+    }
+    if body.dockerfile is not None:
+        src["docker_template"] = body.dockerfile
+    if body.railway_json is not None:
+        src["railway_json_template"] = body.railway_json
+    await db.projects.update_one({"id": pid}, {"$set": src})
+    return {"saved": True}
+
+
+@api.post("/projects/{pid}/refetch")
+async def refetch_and_deploy(pid: str):
+    project = await db.projects.find_one({"id": pid}, {"_id": 0})
+    if not project:
+        raise HTTPException(404, "Project not found")
+    src_url = project.get("emergent_source_url")
+    src_pwd = project.get("emergent_source_password")
+    if not (src_url and src_pwd):
+        raise HTTPException(400, "Emergent source not configured — set it in project settings first")
+    if not project.get("railway_project_token"):
+        raise HTTPException(400, "Railway project token not set — configure it in project settings")
+
+    # Fetch → zip → kick off same deploy background task
+    try:
+        dest = await ef.fetch_workspace(
+            src_url, src_pwd,
+            workspace_root=project.get("emergent_workspace_root", "/app"),
+            subdir=project.get("emergent_subdir"),
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Fetch failed: {e}")
+
+    # Inject cached Dockerfile / railway.json if present
+    docker_tmpl = project.get("docker_template")
+    if docker_tmpl and not (dest / "Dockerfile").exists():
+        (dest / "Dockerfile").write_text(docker_tmpl)
+    rj_tmpl = project.get("railway_json_template")
+    if rj_tmpl and not (dest / "railway.json").exists():
+        (dest / "railway.json").write_text(rj_tmpl)
+
+    # Zip
+    import shutil
+    zip_path = UPLOAD_ROOT / f"refetch_{uuid.uuid4()}.zip"
+    shutil.make_archive(str(zip_path).replace(".zip", ""), "zip", str(dest))
+
+    initial_env = {d["key"]: d["value"] for d in await db.env_vars.find(
+        {"project_id": pid}, {"_id": 0}).to_list(500)}
+    await db.projects.update_one({"id": pid}, {"$set": {
+        "status": "deploying",
+        "size_mb": round(zip_path.stat().st_size / (1024 * 1024), 2),
+    }})
+    deployment_id = str(uuid.uuid4())
+    await db.deployments.insert_one({
+        "id": deployment_id, "project_id": pid, "project_name": project["name"],
+        "status": "building", "progress": 0,
+        "logs": [{"ts": now_iso(), "level": "info",
+                   "msg": f"Refetched {sum(1 for _ in dest.rglob('*') if _.is_file())} files from Emergent — starting deploy"}],
+        "created_at": now_iso(), "finished_at": None, "railway_deployment_id": None,
+    })
+    asyncio.create_task(run_real_deploy(deployment_id, pid, str(zip_path), project["name"], initial_env))
+    # Cleanup fetched dir after zip is on disk
+    shutil.rmtree(dest, ignore_errors=True)
+    return {"deployment_id": deployment_id, "project_id": pid}
 
 
 app.include_router(api)
