@@ -110,7 +110,7 @@ export default function ProjectsList({ projects, api, onChange, onOpenEnv, onOpe
           return (
             <li key={p.id} className="px-6 py-4 flex items-center gap-4 hover:bg-neutral-50 transition-colors" data-testid={`project-row-${p.name}`}>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2.5 flex-wrap">
                   <span className="font-medium text-sm truncate">{p.name}</span>
                   <span className={`text-[11px] px-2 py-0.5 rounded-full ${STATUS_STYLES[p.status] || STATUS_STYLES.stopped}`} data-testid={`project-status-${p.name}`}>
                     {p.status}
@@ -129,16 +129,34 @@ export default function ProjectsList({ projects, api, onChange, onOpenEnv, onOpe
                     </span>
                   )}
                 </div>
-                <div className="mt-0.5 flex items-center gap-3 text-xs text-neutral-500">
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
                   <span>{p.framework || "detecting"}</span>
-                  {p.size_mb && <><span className="text-neutral-300">·</span><span className="font-mono">{p.size_mb} MB</span></>}
-                  <span className="text-neutral-300">·</span>
+                  {p.size_mb ? <><span className="text-neutral-300">·</span><span className="font-mono">{p.size_mb} MB</span></> : null}
+                </div>
+                <div className="mt-1.5 flex flex-col gap-1 text-xs">
+                  {p.frontend_url && (
+                    <a href={p.frontend_url} target="_blank" rel="noreferrer" data-testid={`project-store-url-${p.name}`}
+                       className="flex items-center gap-1.5 text-neutral-600 hover:text-[#FF4400] font-mono truncate group">
+                      <span className="uppercase tracking-wider text-[10px] font-sans text-neutral-400 shrink-0">Store</span>
+                      <span className="truncate">{p.frontend_url.replace(/^https?:\/\//, "")}</span>
+                      <ExternalLink size={10} strokeWidth={1.5} className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                    </a>
+                  )}
                   {p.url ? (
-                    <a href={p.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-[#FF4400] transition-colors truncate">
-                      {p.url.replace(/^https?:\/\//, "")} <ExternalLink size={11} strokeWidth={1.5} />
+                    <a href={p.url} target="_blank" rel="noreferrer" data-testid={`project-api-url-${p.name}`}
+                       className="flex items-center gap-1.5 text-neutral-600 hover:text-[#FF4400] font-mono truncate group">
+                      <span className="uppercase tracking-wider text-[10px] font-sans text-neutral-400 shrink-0">{p.frontend_url ? "API" : "URL"}</span>
+                      <span className="truncate">{p.url.replace(/^https?:\/\//, "")}</span>
+                      <ExternalLink size={10} strokeWidth={1.5} className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                     </a>
                   ) : (
                     <span className="italic text-neutral-400">provisioning URL…</span>
+                  )}
+                  {p.admin_email && (
+                    <div className="flex items-center gap-1.5 text-neutral-500 font-mono" data-testid={`project-admin-${p.name}`}>
+                      <span className="uppercase tracking-wider text-[10px] font-sans text-neutral-400 shrink-0">Admin</span>
+                      <span className="truncate">{p.admin_email}{p.admin_password ? ` / ${p.admin_password}` : ""}</span>
+                    </div>
                   )}
                 </div>
               </div>

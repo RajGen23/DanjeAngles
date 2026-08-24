@@ -2,14 +2,22 @@ import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
-import { ExternalLink, Github, KeyRound, X } from "lucide-react";
+import { ExternalLink, Github, Globe, KeyRound, User, X } from "lucide-react";
 
 export default function ProjectSettingsModal({ api, project, ghUser, onClose, onChange }) {
   const [token, setToken] = useState("");
   const [ghEnabled, setGhEnabled] = useState(!!project?.github_sync);
+  const [frontendUrl, setFrontendUrl] = useState(project?.frontend_url || "");
+  const [adminEmail, setAdminEmail] = useState(project?.admin_email || "");
+  const [adminPassword, setAdminPassword] = useState(project?.admin_password || "");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { setGhEnabled(!!project?.github_sync); }, [project]);
+  useEffect(() => {
+    setGhEnabled(!!project?.github_sync);
+    setFrontendUrl(project?.frontend_url || "");
+    setAdminEmail(project?.admin_email || "");
+    setAdminPassword(project?.admin_password || "");
+  }, [project]);
 
   const saveToken = useCallback(async () => {
     if (!token.trim()) return toast.error("Paste a token first");
@@ -35,6 +43,21 @@ export default function ProjectSettingsModal({ api, project, ghUser, onClose, on
       toast.error(e.response?.data?.detail || "Toggle failed");
     } finally { setSaving(false); }
   }, [api, project, onChange]);
+
+  const saveUrls = useCallback(async () => {
+    setSaving(true);
+    try {
+      await axios.post(`${api}/projects/${project.id}/urls`, {
+        frontend_url: frontendUrl.trim() || null,
+        admin_email: adminEmail.trim() || null,
+        admin_password: adminPassword || null,
+      });
+      toast.success("URLs & admin saved");
+      onChange();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Save failed");
+    } finally { setSaving(false); }
+  }, [api, project, frontendUrl, adminEmail, adminPassword, onChange]);
 
   if (!project) return null;
   const hasToken = !!project.railway_project_token;
@@ -62,7 +85,59 @@ export default function ProjectSettingsModal({ api, project, ghUser, onClose, on
             </button>
           </div>
 
-          <div className="p-6 space-y-6">
+          <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+            {/* Public URLs + admin creds */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Globe size={13} strokeWidth={1.75} className="text-neutral-400" />
+                <span className="text-xs uppercase tracking-wider text-neutral-500">Public URLs &amp; admin</span>
+              </div>
+              <p className="text-[11px] text-neutral-500 leading-relaxed mb-3">
+                Both URLs (Store + API) and admin credentials show on the project row for quick access.
+              </p>
+              <div className="space-y-2">
+                <div className="flex gap-2 items-center">
+                  <span className="text-[10px] uppercase tracking-wider text-neutral-400 w-14 shrink-0">Store</span>
+                  <input
+                    value={frontendUrl}
+                    onChange={(e) => setFrontendUrl(e.target.value)}
+                    placeholder="https://your-frontend.up.railway.app"
+                    data-testid="frontend-url-input"
+                    className="flex-1 border border-neutral-200 rounded-sm px-3 py-2 text-sm font-mono focus:outline-none focus-visible:ring-1 focus-visible:ring-[#FF4400] bg-white"
+                  />
+                </div>
+                <div className="flex gap-2 items-center">
+                  <span className="text-[10px] uppercase tracking-wider text-neutral-400 w-14 shrink-0">Admin</span>
+                  <input
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                    placeholder="admin@example.com"
+                    data-testid="admin-email-input"
+                    className="flex-1 border border-neutral-200 rounded-sm px-3 py-2 text-sm font-mono focus:outline-none focus-visible:ring-1 focus-visible:ring-[#FF4400] bg-white"
+                  />
+                </div>
+                <div className="flex gap-2 items-center">
+                  <span className="text-[10px] uppercase tracking-wider text-neutral-400 w-14 shrink-0">Password</span>
+                  <input
+                    type="text"
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    placeholder="admin password"
+                    data-testid="admin-password-input"
+                    className="flex-1 border border-neutral-200 rounded-sm px-3 py-2 text-sm font-mono focus:outline-none focus-visible:ring-1 focus-visible:ring-[#FF4400] bg-white"
+                  />
+                </div>
+                <button
+                  onClick={saveUrls}
+                  disabled={saving}
+                  data-testid="save-urls-btn"
+                  className="w-full px-3 py-2 bg-[#FF4400] hover:bg-[#E63D00] text-white text-sm rounded-sm disabled:opacity-50 transition-colors"
+                >
+                  Save URLs &amp; admin
+                </button>
+              </div>
+            </div>
+
             {/* Railway project token */}
             <div>
               <div className="flex items-center gap-2 mb-2">

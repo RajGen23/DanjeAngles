@@ -73,6 +73,12 @@ class GithubSyncInput(BaseModel):
     enabled: bool
 
 
+class ProjectUrlsInput(BaseModel):
+    frontend_url: Optional[str] = None
+    admin_email: Optional[str] = None
+    admin_password: Optional[str] = None
+
+
 def _rand_password(n: int = 24) -> str:
     import secrets, string
     alpha = string.ascii_letters + string.digits
@@ -717,6 +723,23 @@ async def toggle_github_sync(pid: str, body: GithubSyncInput):
         raise HTTPException(400, "GITHUB_PAT is not configured server-side")
     await db.projects.update_one({"id": pid}, {"$set": {"github_sync": bool(body.enabled)}})
     return {"github_sync": bool(body.enabled)}
+
+
+@api.post("/projects/{pid}/urls")
+async def set_project_urls(pid: str, body: ProjectUrlsInput):
+    project = await db.projects.find_one({"id": pid}, {"_id": 0})
+    if not project:
+        raise HTTPException(404, "Project not found")
+    upd: dict = {}
+    if body.frontend_url is not None:
+        upd["frontend_url"] = body.frontend_url.strip() or None
+    if body.admin_email is not None:
+        upd["admin_email"] = body.admin_email.strip() or None
+    if body.admin_password is not None:
+        upd["admin_password"] = body.admin_password
+    if upd:
+        await db.projects.update_one({"id": pid}, {"$set": upd})
+    return {"saved": True, "updated": list(upd.keys())}
 
 
 app.include_router(api)
