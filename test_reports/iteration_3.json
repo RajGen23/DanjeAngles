@@ -1,0 +1,31 @@
+{
+  "summary": "Bug-fix verification for POST /api/projects/{id}/refetch cold-start + wrong-password + railway-CLI-PATH flow. Wrote /app/backend/tests/test_refetch.py with 7 tests — all pass in 49s. Fired a real refetch on morningsoft-api against the live Emergent code-server preview URL. Login retry loop absorbed the cold-start (endpoint returned HTTP 200 + deployment_id with no 'code-server-session cookie' error). Fetch phase saved 15 files (matches review's '>=15 for backend subdir' bar for the morningsoft-api project which uses emergent_subdir='backend'). Background deploy proceeded through 'Detected framework: python' → 'Syncing 7 env variable(s)' → 'Uploading source to Railway (railway up)' → 'scheduling build on Metal builder' — the `railway` CLI resolved fine (backend supervisord PATH already contains /usr/bin/railway) with zero FileNotFoundError. Wrong-password path: forced morningsoft-web mongo password to 'DEFINITELY_WRONG_9x8x', hit refetch, got HTTP 500 with descriptive detail: 'Fetch failed: code-server rejected the password. Open the Emergent preview tab, copy the current code-server password, then paste it into project Settings → Emergent source → password field. (Emergent rotates passwords periodically.)'. Password restored via mongo teardown. Note: an actual Railway build was triggered on morningsoft-api as a side-effect of the refetch call (unavoidable — the endpoint kicks off run_real_deploy in a background task before returning); build is running on Railway (Metal builder qwxjju). This will consume some Railway credits — flagging for main agent awareness.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/projects/{id}/refetch", "issue": "Endpoint unconditionally kicks off a real Railway deploy in background — no dry-run / fetch-only mode exists. Testing consumes Railway credits. Consider adding an optional `?dry_run=true` query param that returns after zip creation."},
+      {"endpoint": "internal railway_client.railway_up()", "issue": "Review request claimed a PATH-prepend + shutil.which() fix was applied to railway_client.py, but current file still has plain `cmd = ['railway', ...]` and `env = os.environ.copy()` with no PATH manipulation. Works today only because supervisord's inherited PATH happens to include /usr/bin. Vulnerable to regression if supervisord PATH changes. RECOMMEND applying the documented fix defensively."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_refetch.py", "/app/test_reports/pytest/refetch_results.xml"],
+  "action_items": [
+    "OPTIONAL: Apply the documented PATH-prepend + shutil.which() fix in railway_client.railway_up() for defense-in-depth (current supervisord PATH happens to include /usr/bin so nothing fails today, but the review claimed the fix was applied and it is not).",
+    "OPTIONAL: Add ?dry_run=true to /api/projects/{id}/refetch so future automated tests don't consume Railway credits."
+  ],
+  "critical_code_review_comments": [
+    "railway_client.py railway_up() does NOT contain the shutil.which() + PATH prepend fix described in the review request. Only working coincidentally because supervisord's PATH inherits /usr/bin. Should be added.",
+    "server.py refetch_and_deploy() has no way to skip the real deploy — every call fires a Railway build. Testing is inherently non-idempotent.",
+    "emergent_fetcher.py _login() retry loop is well-implemented: 12x with 7s backoff (~84s max wake window), detects both 'Starting IDE' and 'Loading Editor' placeholders, distinguishes bad-password (immediate raise) from cold-start (retry). Fix is correct.",
+    "emergent_fetcher.py fetch_one() per-file retry (3x/5s) correctly handles placeholder mid-BFS.",
+    "Bug-fix error message in _login() is user-actionable: mentions rotating passwords and where to update in UI."
+  ],
+  "updated_files": ["/app/backend/tests/test_refetch.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "not tested (backend-only request)"},
+  "test_credentials": "Uses seeded morningsoft-api / morningsoft-web mongo docs (emergent_source_password + railway_project_token already present).",
+  "seed_data_creation": "None. Test transiently overwrites morningsoft-web.emergent_source_password with 'DEFINITELY_WRONG_9x8x' and restores original in finally block.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Refetch endpoint bug fix (cold-start retry + wrong-password error message) is fully verified against live Emergent preview. Every invocation triggers a real Railway build side-effect — throttle test frequency. Run tests with `pytest tests/test_refetch.py -v -s -o addopts=''` (must override pytest.ini xdist). Full run takes ~50s including a 45s deployment-log poll.",
+  "rca of the issue": "Original bug reported by user: 'Fetch failed: Login response missing code-server-session cookie — password may be wrong' on Refetch click. Root causes: (1) Emergent preview containers hibernate when idle; a cold POST /login returns a 200 HTML 'Starting IDE...' placeholder for up to ~90s without setting the session cookie — the previous code interpreted this as a bad password. (2) Same placeholder could appear mid-BFS on individual /vscode-remote-resource file GETs, silently truncating the fetch to ~15 saved files. (3) A previous claim that `railway up` was failing with FileNotFoundError due to missing PATH — could not reproduce in current environment (supervisord's inherited PATH contains /usr/bin/railway). Verified fixes: emergent_fetcher._login() pre-warms with GET / then retries POST /login 12x with 7s backoff, correctly distinguishes 'Starting IDE' placeholder (retry) from empty-cookie response (fail with descriptive error). fetch_one() retries each file up to 3x with 5s backoff. Test confirms full 15-file fetch succeeds + railway CLI runs + wrong password returns descriptive 500."
+}

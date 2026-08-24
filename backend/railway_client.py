@@ -308,8 +308,11 @@ async def railway_up(source_dir: str, project_id: str, service_id: str,
     tok = token or _token()
     env["RAILWAY_API_TOKEN"] = tok
     env["RAILWAY_TOKEN"] = tok
+    # Defense-in-depth: ensure the CLI is on PATH regardless of supervisord's inherited env
+    env["PATH"] = "/usr/local/bin:/usr/bin:/bin:" + env.get("PATH", "")
+    railway_bin = shutil.which("railway", path=env["PATH"]) or "railway"
     cmd = [
-        "railway", "up", source_dir,
+        railway_bin, "up", source_dir,
         "--detach", "--ci",
         "--service", service_id,
     ]

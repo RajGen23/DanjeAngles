@@ -47,24 +47,51 @@ async def _login(url: str, password: str) -> str:
 
     code-server sets the cookie with Domain=<internal-cluster-host>, which httpx
     (correctly per RFC) discards. We must parse the raw Set-Cookie header.
+
+    Emergent preview containers idle-scale to zero; when hit while cold they
+    return a 2.4KB 'Starting IDE...' HTML placeholder for up to ~90 seconds.
+    We detect that and retry with backoff.
     """
-    async with httpx.AsyncClient(follow_redirects=False, timeout=20) as c:
-        r = await c.post(
-            f"{url.rstrip('/')}/login",
-            headers={"User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded"},
-            content=f"password={urllib.parse.quote(password)}",
-        )
-    if r.status_code not in (200, 302, 303):
-        raise EmergentFetchError(f"Login failed: HTTP {r.status_code}")
-    # Scan raw multi-value Set-Cookie headers
-    getter = r.headers.multi_items if hasattr(r.headers, "multi_items") else r.headers.items
-    for k, v in getter():
-        if k.lower() == "set-cookie" and "code-server-session=" in v:
-            # v may look like: 'code-server-session=xxx; Path=/; Domain=...; HttpOnly'
-            first = v.split(";", 1)[0].strip()
-            if first.startswith("code-server-session="):
-                return first
-    raise EmergentFetchError("Login response missing code-server-session cookie — password may be wrong")
+    base = url.rstrip("/")
+    async with httpx.AsyncClient(follow_redirects=False, timeout=25) as c:
+        # Pre-warm: hit / to nudge Emergent to spin up a hibernated container
+        try:
+            await c.get(f"{base}/", headers={"User-Agent": UA})
+        except Exception:
+            pass
+        for attempt in range(12):  # up to ~90s of wake-up retries
+            r = await c.post(
+                f"{base}/login",
+                headers={"User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded"},
+                content=f"password={urllib.parse.quote(password)}",
+            )
+            if r.status_code not in (200, 302, 303):
+                raise EmergentFetchError(f"Login failed: HTTP {r.status_code}")
+            # Look for the code-server session cookie in raw Set-Cookie headers
+            getter = r.headers.multi_items if hasattr(r.headers, "multi_items") else r.headers.items
+            for k, v in getter():
+                if k.lower() == "set-cookie" and "code-server-session=" in v:
+                    first = v.split(";", 1)[0].strip()
+                    if first.startswith("code-server-session="):
+                        return first
+            # No session cookie yet. If the body is the "Starting IDE..." wake-up
+            # placeholder, wait and retry. Otherwise assume the password is wrong.
+            body = r.text[:400]
+            if "Starting IDE" in body or "Loading Editor" in body:
+                await asyncio.sleep(7)
+                continue
+            # Non-placeholder response with no cookie → password issue
+            raise EmergentFetchError(
+                "code-server rejected the password. Open the Emergent preview tab, "
+                "copy the current code-server password, then paste it into "
+                "project Settings → Emergent source → password field. "
+                "(Emergent rotates passwords periodically.)"
+            )
+    raise EmergentFetchError(
+        "Emergent workspace is still waking up after 90s. "
+        "Open the Emergent preview tab in your browser once to wake the container, "
+        "then click Refetch again."
+    )
 
 
 def _resolve_js(spec: str, current_file: str, workspace_root: str) -> list[str]:
@@ -169,17 +196,22 @@ async def fetch_workspace(url: str, password: str, workspace_root: str = "/app",
                 return None
             visited.add(path)
             async with sem:
-                try:
-                    q = urllib.parse.quote(path, safe="/")
-                    r = await client.get(f"{base}/vscode-remote-resource?path={q}")
-                except Exception as e:
-                    log.debug("fetch fail %s: %s", path, e)
-                    return None
-            if r.status_code != 200:
+                for _ in range(3):  # retry if we hit the 'Starting IDE' placeholder
+                    try:
+                        q = urllib.parse.quote(path, safe="/")
+                        r = await client.get(f"{base}/vscode-remote-resource?path={q}")
+                    except Exception as e:
+                        log.debug("fetch fail %s: %s", path, e)
+                        return None
+                    if r.status_code != 200:
+                        return None
+                    if r.content.startswith(b"<!DOCTYPE") or r.content.startswith(b"<html"):
+                        if b"Starting IDE" in r.content[:400] or b"Loading Editor" in r.content[:400]:
+                            await asyncio.sleep(5)
+                            continue
+                        return None
+                    return r.content
                 return None
-            if r.content.startswith(b"<!DOCTYPE") or r.content.startswith(b"<html"):
-                return None
-            return r.content
 
         def save(path: str, body: bytes) -> Path | None:
             if path in saved:
