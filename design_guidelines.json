@@ -1,0 +1,112 @@
+{
+  "theme": "light",
+  "design_philosophy": "Swiss High-Contrast Minimalism. Achromatic foundation (warm off-white and pure white) with a single vibrant accent color used strictly for function. High density grid for dashboard structure, combined with featherlight elevation (1px borders, no shadows).",
+  "typography": {
+    "headings": {
+      "font_family": "Manrope",
+      "scale": "text-xl to text-4xl",
+      "weight": "font-light to font-bold",
+      "letter_spacing": "tracking-tight",
+      "import": "@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;600;700&display=swap');"
+    },
+    "body": {
+      "font_family": "IBM Plex Sans",
+      "scale": "text-sm to text-base",
+      "weight": "font-normal",
+      "letter_spacing": "tracking-normal",
+      "import": "@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap');"
+    },
+    "monospace": {
+      "font_family": "IBM Plex Mono",
+      "scale": "text-xs",
+      "import": "@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap');"
+    }
+  },
+  "colors": {
+    "background": "#FAF9F7",
+    "surface": "#FFFFFF",
+    "border": "#E5E5E5",
+    "text_primary": "#171717",
+    "text_secondary": "#737373",
+    "accent_primary": "#FF4400",
+    "accent_hover": "#E63D00",
+    "terminal_bg": "#0A0A0A",
+    "terminal_text": "#F5F5F5",
+    "status": {
+      "success": "#10B981",
+      "error": "#EF4444",
+      "warning": "#F59E0B",
+      "info": "#3B82F6"
+    }
+  },
+  "visual_enhancers": {
+    "elevation": "Featherlight: Use 1px solid borders (border-neutral-200) and completely avoid drop shadows.",
+    "border_radius": "Technical & Crisp: Use rounded-sm (4px) universally for all cards, buttons, and inputs.",
+    "textures": "Include a highly transparent, subtle SVG noise overlay across the main body background to kill digital flatness.",
+    "hover_states": "Interactive elements must shift background color distinctly (e.g., hover:bg-neutral-100)."
+  },
+  "layouts": {
+    "page_structure": "Single open dashboard view with a top navigation bar (Solid white, 1px bottom border, sticky top-0, z-50). Main content max-w-7xl with p-6 or p-8.",
+    "grid_system": "Bento Grid Protocol (High Density). Base grid: grid-cols-1 md:grid-cols-3 lg:grid-cols-4. Gap: gap-6.",
+    "sections": [
+      {
+        "name": "Overview Stats",
+        "span": "col-span-1 (x3)",
+        "description": "3 distinct metric cards (Apps Running, Total Deployments, Uptime)."
+      },
+      {
+        "name": "Projects List",
+        "span": "col-span-1 md:col-span-2",
+        "description": "List of running apps with status badges, uptime, and start/stop/restart icon buttons."
+      },
+      {
+        "name": "Deployment & Logs",
+        "span": "col-span-1 md:col-span-2",
+        "description": "Upload zone (drag & drop) paired with a live deploy logs viewer (dark terminal look)."
+      },
+      {
+        "name": "Resource Monitoring",
+        "span": "col-span-1 md:col-span-2 lg:col-span-3",
+        "description": "CPU/RAM/Disk line charts using Recharts."
+      },
+      {
+        "name": "Domain Management",
+        "span": "col-span-1",
+        "description": "Input for custom domain and list of mapped domains with DNS status."
+      }
+    ]
+  },
+  "components": {
+    "Buttons": "Sharp or slightly rounded (rounded-sm). Primary uses accent color (bg-[#FF4400] text-white). Secondary uses white background with 1px border.",
+    "Cards": "Pure white background, 1px border (border-neutral-200), rounded-sm, p-6. NO SHADOWS.",
+    "Logs_Viewer": "bg-[#0A0A0A] text-[#F5F5F5] rounded-sm p-4 font-mono text-xs overflow-y-auto h-[250px]. Use color spans for logs.",
+    "Upload_Zone": "Dashed border, bg-neutral-50, min-h-[150px] flex items-center justify-center. Transition hover state.",
+    "Charts": "Recharts. Remove grid lines or make them extremely faint. Use monochromatic lines.",
+    "Badges": "Pill-shaped or rounded-sm text-xs px-2.5 py-0.5. Status driven (e.g., bg-emerald-100 text-emerald-800)."
+  },
+  "icons": "Use lucide-react. Stroke width 1.5.",
+  "motion": {
+    "micro_interactions": "Hover transitions on buttons and list items.",
+    "entrance": "Staggered fade-in for grid items using framer-motion."
+  },
+  "accessibility": {
+    "contrast": "Ensure text meets 4.5:1 ratio. focus-visible outlines on all interactive elements.",
+    "testing": "All interactive elements MUST have data-testid attributes."
+  },
+  "instructions_to_main_agent": [
+    "Install and use Manrope for headings and IBM Plex Sans for body text in index.css.",
+    "Override default Shadcn styles: remove all drop-shadows on cards and buttons, use strictly 1px borders and rounded-sm.",
+    "Do not implement complex routing. All components (Stats, Projects, Deployments, Logs, Resources, Domains) should be visible on a single scrollable dashboard page.",
+    "Use lucide-react for icons.",
+    "Build the log viewer as a dark '#0A0A0A' terminal block to contrast the light minimal layout.",
+    "Use Recharts for Resource Monitoring charts. Keep them clean and minimalist.",
+    "Add 'data-testid' to all buttons, inputs, and major containers."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Avoid the generic 'AI slop' look: use crisp lines, generous padding (p-6/p-8), and intentional whitespace.",
+    "Never use `transition: all`. Target specific properties.",
+    "Do NOT use center-aligned text generically. Left-align text for better readability.",
+    "Never use completely transparent backgrounds for overlays or navbars.",
+    "Use sonner for toast notifications."
+  ]
+}

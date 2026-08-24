@@ -1,0 +1,20 @@
+{
+  "summary": "Full backend + frontend testing of selfhost control panel. 13/13 backend pytest tests pass covering stats, projects CRUD/actions, deploy simulation (upload zip, 12s simulated deploy reaching progress=100 and status=live), deployment fetch/list, resources (24 points), and domains (invalid 400, duplicate 409, propagating -> active after ~8s, delete 200/404). Frontend Playwright E2E tests pass: dashboard loads with 4 stat cards, projects list renders 2 seeded projects with working start/stop/restart, resource charts (CPU/RAM/Disk) render with live %, zip upload auto-fills app name, deploy runs to 100% with streaming logs, domain add/propagate/delete works and invalid format shows error toast.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py uses deprecated FastAPI @app.on_event('startup'/'shutdown') — consider migrating to lifespan context.",
+    "Deploy endpoint reads full file into memory; fine for MVP but not for large uploads.",
+    "Domain validation regex forbids single-label TLDs and IDN — acceptable for MVP.",
+    "run_deploy background task is not persisted; if backend restarts mid-deploy the deployment will be stuck in 'building'. Acceptable for simulated MVP."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Backend auto-seeds portfolio-site and crm-dashboard on startup when projects collection empty. Test created and cleaned up TEST_* projects and a temporary ui-test-app project during UI test (cleaned up post-run).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend URL from /app/frontend/.env. Pytest requires -n 0 to run serially (pytest.ini forces xdist -n 2 which is fine too). Deployment simulation ~12s, domain propagation ~8s; use appropriate sleeps.",
+  "rca of the issue": "N/A — no bugs found."
+}
