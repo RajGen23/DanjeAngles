@@ -1,0 +1,33 @@
+{
+  "summary": "Verified the claimed 'sed rewrite of brandjunction.xyz -> www.brandjunction.xyz in docker_template' fix. RESULT: FIX NOT APPLIED. The docker_template stored in MongoDB for morningsoft-web does NOT contain any 'sed -i' step and does NOT reference 'www.brandjunction.xyz'. Live HTML at https://www.brandjunction.xyz/ (mobile UA) still contains bare 'https://brandjunction.xyz/' in canonical/og:url/og:image — exact bug the fix was meant to address. Also, the most recent deployment failed because Railway returned 429 Too Many Requests during 'waiting for deployment record'.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "MongoDB test_database.projects.morningsoft-web.docker_template", "issue": "docker_template does NOT contain the promised sed replacement step. Current template is the plain 2-stage Node/serve Dockerfile with NO 'sed -i' and NO 'www.brandjunction.xyz' string. The main agent's DB update apparently did not persist.", "priority": "CRITICAL"},
+      {"endpoint": "https://www.brandjunction.xyz/ (production, mobile UA)", "issue": "HTML still contains: <link rel=\"canonical\" href=\"https://brandjunction.xyz/\"/> AND og:url content=\"https://brandjunction.xyz/\" AND og:image content=\"https://brandjunction.xyz/products/img_10.png\". Zero occurrences of 'www.brandjunction.xyz' in canonical/og tags. Mobile-breaking bug NOT fixed.", "priority": "CRITICAL"},
+      {"endpoint": "POST /api/projects/{id}/refetch (latest deployment 58ab2dc2-6ebb-4f14-bf45-899f938a7cdc)", "issue": "Deployment failed at 2026-08-24T16:53:xx due to Railway 'Client error 429 Too Many Requests' at backboard.railway.app/graphql/v2 while polling for deployment record. Project status remained 'deploying' in Mongo but deployment doc is 'failed'. Auto-heal did not flip status to 'running'.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [],
+  "action_items": [
+    "Re-apply the docker_template update in Mongo — verify with: db.projects.findOne({name:'morningsoft-web'}).docker_template — must contain a 'RUN sed -i ...' step that rewrites https://brandjunction.xyz -> https://www.brandjunction.xyz in build/**/*.{html,js,css,json,webmanifest} BEFORE the final stage. The previous $set apparently did not commit (check for typo in field name, wrong _id filter, or connection to wrong DB).",
+    "After the docker_template is confirmed persisted, retrigger refetch. Note the last attempt failed on Railway 429 — wait a few minutes to let rate-limit reset before retriggering.",
+    "Consider a more robust approach than sed on built artifacts: patch public/index.html and public/manifest.json source templates so canonical/og:url/og:image use 'www.brandjunction.xyz', OR add a DNS A record for apex brandjunction.xyz pointing to Railway so both hosts resolve.",
+    "After redeploy, re-run: curl -A '<iPhone UA>' https://www.brandjunction.xyz/ | grep 'brandjunction.xyz' — every hit must be prefixed with 'www.'.",
+    "Investigate why project.status stays 'deploying' after a deployment record transitions to 'failed' — auto-heal logic in GET /api/projects should reconcile this."
+  ],
+  "critical_code_review_comments": [
+    "server.py refetch_and_deploy (line 826-828): docker_template is only written if Dockerfile does NOT already exist in the fetched source. If the source workspace ships its own Dockerfile, the cached template (with the sed fix) will be silently ignored. Recommend overwriting (or logging when skipped) so injected template takes precedence.",
+    "No verification/echo of the docker_template that gets written — add a log line printing sha256 or first N chars so operators can confirm which template was used per deployment.",
+    "Deployment error field is undefined even when status='failed' — the failure reason (Railway 429) is only visible in logs array. Populate deployments.error explicitly for easier RCA."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "0% (0/6 required checks passed)", "frontend": "N/A (backend-only test)"},
+  "test_credentials": "N/A — no panel auth; direct Mongo + public site checks only",
+  "seed_data_creation": "None",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Checks performed: (1) mongosh query on test_database.projects morningsoft-web -> docker_template does NOT contain 'sed -i' or 'www.brandjunction.xyz'. (2) curl with iPhone UA to https://www.brandjunction.xyz/ returned HTTP 200 but HTML still has canonical/og:url/og:image pointing to bare apex brandjunction.xyz. (3) Latest deployment 58ab2dc2-6ebb-4f14-bf45-899f938a7cdc failed due to Railway 429. Did NOT trigger a new refetch (per instructions to avoid burning Railway credits). Next agent should first re-verify docker_template in Mongo AFTER main agent re-persists it, then retrigger refetch and poll deployment until 'live', then re-curl mobile UA and grep.",
+  "rca of the issue": "Root cause: the DB write that was supposed to add the sed-rewrite step to projects.docker_template for morningsoft-web never actually persisted. Current value in Mongo is the untouched plain Dockerfile. Consequently, the refetch->deploy pipeline zipped the source with the original Dockerfile (no rewrite), and the deployed build/index.html still hard-codes bare 'brandjunction.xyz' in canonical/og tags. Reproduction: mongosh mongodb://localhost:27017/test_database --eval \"db.projects.findOne({name:'morningsoft-web'}).docker_template\" — output has no 'sed'. Mitigation: (a) re-run the update with $set on the exact _id/name filter and confirm modifiedCount=1; (b) fix the underlying HTML/manifest sources so no sed is needed; (c) add an apex DNS A record so brandjunction.xyz also resolves as a safety net."
+}

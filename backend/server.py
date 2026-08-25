@@ -822,12 +822,15 @@ async def refetch_and_deploy(pid: str):
     except Exception as e:
         raise HTTPException(500, f"Fetch failed: {e}")
 
-    # Inject cached Dockerfile / railway.json if present
+    # Inject cached Dockerfile / railway.json if present.
+    # Always OVERWRITE — the cached template is authoritative (contains fixes
+    # like the mobile canonical sed step that the fetched source may lack).
     docker_tmpl = project.get("docker_template")
-    if docker_tmpl and not (dest / "Dockerfile").exists():
+    if docker_tmpl:
         (dest / "Dockerfile").write_text(docker_tmpl)
+        logger.info("refetch: wrote cached docker_template (%d chars) to %s/Dockerfile", len(docker_tmpl), dest)
     rj_tmpl = project.get("railway_json_template")
-    if rj_tmpl and not (dest / "railway.json").exists():
+    if rj_tmpl:
         (dest / "railway.json").write_text(rj_tmpl)
 
     # Zip
