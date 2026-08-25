@@ -259,6 +259,10 @@ async def run_real_deploy(deployment_id: str, project_local_id: str, zip_path: s
                         if url and not url.startswith("http"):
                             url = f"https://{url}"
                         final_url = url or rw_public_url
+                        # Prefer custom domain (set by user via /api/domains) over Railway subdomain
+                        proj_now = await db.projects.find_one({"id": project_local_id}, {"_id": 0, "custom_domain": 1})
+                        if proj_now and proj_now.get("custom_domain"):
+                            final_url = proj_now["custom_domain"]
                         await _log(deployment_id, "ok", f"Deployment live at {final_url}")
                         await db.deployments.update_one({"id": deployment_id}, {"$set": {
                             "status": "live", "progress": 100, "finished_at": now_iso(),
@@ -356,6 +360,9 @@ async def list_projects():
             url = latest.get("url") or latest.get("staticUrl")
             if url and not url.startswith("http"):
                 url = f"https://{url}"
+            # Prefer custom domain when the project has one attached
+            if p.get("custom_domain"):
+                url = p["custom_domain"]
             upd = {"status": "running", "last_deployed_at": now_iso()}
             if url:
                 upd["url"] = url
