@@ -319,12 +319,43 @@ async def delete_custom_domain(domain_id: str) -> None:
     await gql("mutation($id: String!) { customDomainDelete(id: $id) }", {"id": domain_id})
 
 
+CLI_PATH = "/usr/local/bin:/usr/bin:/bin"
+_cli_lock = asyncio.Lock()
+
+
+async def ensure_cli() -> tuple[str, str]:
+    """Returns (railway_binary_path, note). Reinstalls the Railway CLI if the binary
+    went missing (the container filesystem does not persist global npm installs)."""
+    found = shutil.which("railway", path=CLI_PATH)
+    if found:
+        return found, ""
+    async with _cli_lock:
+        found = shutil.which("railway", path=CLI_PATH)
+        if found:
+            return found, ""
+        log.warning("railway CLI missing — installing @railway/cli")
+        proc = await asyncio.create_subprocess_exec(
+            "npm", "install", "-g", "@railway/cli",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        try:
+            out, _ = await asyncio.wait_for(proc.communicate(), timeout=300)
+        except asyncio.TimeoutError:
+            proc.kill()
+            raise RailwayError("Railway CLI install timed out after 5 minutes")
+        found = shutil.which("railway", path=CLI_PATH)
+        if not found:
+            raise RailwayError("Railway CLI install failed: "
+                               + (out or b"").decode(errors="replace")[-400:])
+        return found, "Railway CLI was missing — reinstalled it automatically"
+
+
 # ---------- CLI upload via `railway up` ----------
 async def railway_up(source_dir: str, project_id: str, service_id: str,
                      environment_id: str, token: Optional[str] = None) -> tuple[bool, str]:
     """Runs `railway up` in a subprocess. Uses `token` (a project-scoped token)
     when supplied, otherwise falls back to the account token in RAILWAY_TOKEN.
     Streams no logs (uses --detach). Returns (ok, combined_output)."""
+    railway_bin, note = await ensure_cli()
     env = os.environ.copy()
     if token:
         # Project-scoped token: the CLI reads it from RAILWAY_TOKEN
@@ -337,8 +368,7 @@ async def railway_up(source_dir: str, project_id: str, service_id: str,
         env["RAILWAY_PROJECT_ID"] = project_id
         env["RAILWAY_ENVIRONMENT_ID"] = environment_id
     # Defense-in-depth: ensure the CLI is on PATH regardless of supervisord's inherited env
-    env["PATH"] = "/usr/local/bin:/usr/bin:/bin:" + env.get("PATH", "")
-    railway_bin = shutil.which("railway", path=env["PATH"]) or "railway"
+    env["PATH"] = CLI_PATH + ":" + env.get("PATH", "")
     cmd = [
         railway_bin, "up", source_dir,
         "--detach", "--ci",
@@ -358,6 +388,8 @@ async def railway_up(source_dir: str, project_id: str, service_id: str,
         proc.kill()
         return False, "Deployment timed out after 10 minutes"
     output = (stdout or b"").decode(errors="replace")
+    if note:
+        output = note + "\n" + output
     return proc.returncode == 0, output
 
 

@@ -124,3 +124,10 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
   DNS_RECORD_STATUS_PROPAGATED as active → www.morningsofttissue.com shows active/SSL.
 - Ongoing risk: the Railway CLI is not persistent in this pod. If `which railway` is empty,
   run `npm i -g @railway/cli` before any deploy/refetch.
+
+### 2026-09-02 — Self-healing deploys (DONE)
+- `railway_client.ensure_cli()` checks for the `railway` binary on a fixed PATH and, if missing,
+  runs `npm install -g @railway/cli` behind an asyncio lock (5 min timeout) before every
+  `railway up`. The deployment log records "Railway CLI was missing — reinstalled it automatically".
+- Verified by deleting /usr/bin/railway + /usr/lib/node_modules/@railway and triggering a real
+  marine-web refetch: CLI reinstalled itself and the deploy went live (v4).
