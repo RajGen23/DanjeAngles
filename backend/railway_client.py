@@ -47,7 +47,8 @@ async def _post(headers: dict, query: str, variables: Optional[dict]) -> dict:
         r = await c.post(RAILWAY_URL,
                          headers={**headers, "Content-Type": "application/json"},
                          json={"query": query, "variables": variables or {}})
-    r.raise_for_status()
+    if r.status_code >= 400:
+        raise RailwayError(f"HTTP {r.status_code}: {r.text[:400]}")
     return r.json()
 
 
@@ -84,10 +85,9 @@ async def list_projects() -> list[dict]:
 async def get_project(pid: str) -> dict:
     d = await gql("""
       query($id: String!) { project(id: $id) { id name createdAt
-        services { edges { node { id name serviceInstances { edges { node {
-          id domains { serviceDomains { domain } customDomains { domain status } }
-          latestDeployment { id status url staticUrl }
-        } } } } } }
+        services { edges { node { id name
+          serviceInstances { edges { node { latestDeployment { id status } } } }
+        } } }
         environments { edges { node { id name } } }
       } }
     """, {"id": pid})

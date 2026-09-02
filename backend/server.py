@@ -820,8 +820,6 @@ async def refetch_and_deploy(pid: str):
     src_pwd = project.get("emergent_source_password")
     if not (src_url and src_pwd):
         raise HTTPException(400, "Emergent source not configured — set it in project settings first")
-    if not project.get("railway_project_token"):
-        raise HTTPException(400, "Railway project token not set — configure it in project settings")
 
     # Fetch → zip → kick off same deploy background task
     try:
