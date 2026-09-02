@@ -63,3 +63,15 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
   (`aiblog-api-2a0f4f87` → brand-serp-api, `aiblog-web-f4b73dfa` → brand-serp-web), Mongo reused,
   `SEARCHAPI_KEY` injected. Frontend NOT deployed: Railway free plan resource limit (5/5 services).
   GitHub mirror failed: PAT lacks repo-create permission.
+
+### 2026-09-02 (later) — Mongo crash RECURRED: real root cause = FULL VOLUME
+- `mongo-volume` (500MB plan / 434MB usable) was **100% full**: 123MB `/data/db/diagnostic.data`
+  + 301MB `/data/db/journal`. WiredTiger checkpoint hit errno 28 (ENOSPC) → `Fatal assertion 50853`
+  → mongod aborts → crash loop → morningsoft-api 500s on /api/products.
+- Diagnosis trick: temporarily set the Mongo service startCommand to
+  `sh -c 'df -h /data/db; du -sh /data/db/*; ... ; sleep 3600'` and read deployment logs.
+- Fix applied: deleted diagnostic.data (freed 123MB) and set permanent startCommand
+  `sh -c 'rm -rf /data/db/diagnostic.data; exec docker-entrypoint.sh mongod --auth --bind_ip_all --setParameter diagnosticDataCollectionEnabled=false'`
+  with restartPolicy ALWAYS(10). Verified /api/products 200 + shop renders.
+- Volume resize to 2GB REJECTED by Railway API (free plan caps at 500MB) → user must upgrade to
+  Hobby for headroom. Remaining risk: 301MB journal leaves ~120MB free.
