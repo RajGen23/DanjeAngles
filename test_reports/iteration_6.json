@@ -1,0 +1,42 @@
+{
+  "summary": "End-to-end validation of the freshly deployed Marine Engine Store (MECHANICS) on Railway plus regression for Morning Soft and the control panel. Backend: 15/15 pytest tests pass — GET /api/ returns MECHANICS status, /api/products returns exactly 39 products (no _id leaked), /api/products/brands returns brands list, /api/products/{id} works, POST /api/products rejects anonymous callers (401/403), /api/enquiries accepts valid POST, /api/auth/login accepts admin@mechanics.co.za/Mechanics#2026 and rejects a wrong password, CORS preflight from https://marine-web-production.up.railway.app returns exact-origin ACAO + credentials=true (not wildcard). Morning Soft API and /shop both 200. Control panel /api/projects lists all 4 expected projects (morningsoft-api, morningsoft-web, marine-api, marine-web) and /api/stats,/api/resources,/api/domains all 200. Frontend (Playwright): home renders hero + 500+/40+/90-day stats + featured units; catalogue lists all 39 units, category chip 'Marine' filters to 4 cards, search 'ZF' filters to 1 card, brand dropdown present; product card click opens modal with title/specs/description + WhatsApp/Call/Send-Enquiry CTAs (4 wa.me anchors present); /contact form submits and shows a success toast; /admin login succeeds and Inventory Control dashboard is shown with 39 products + 2 seeded enquiries; admin CRUD verified end-to-end (Add Product → shows 40, Edit rename persists, Delete returns count to 39); mobile 390px viewport has no horizontal overflow and the hamburger menu opens correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "public catalogue -> marine-api /api/products", "issue": "After creating a product in admin, opening a brand-new browser page on /catalogue immediately (≈2s later) still showed 'Showing 39 of 39 units' even though admin count was already 40 and API was persisted. Likely React state or a client-side memoization/caching in the catalogue page — not a backend bug (backend is authoritative and delete correctly returned it to 39). Worth a short investigation on whether the catalogue page uses stale cache-control or in-memory cache."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Admin product modal", "issue": "Image URL is marked required by HTML5 validation, but the placeholder text does not say 'required' and there is no visible label. If an admin leaves it blank they only see a native browser tooltip. Consider making it optional (fall back to a placeholder image) or clearly labelling it as required.", "selector": "input[placeholder='Image URL']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Deployed Marine site (all pages)", "issues": ["Console pageerror on every page load: 'Unexpected token <' — a JS/JSON parse failure, likely a route that returns an HTML fallback (e.g., a manifest.json or a route rewrite catching a static file request). Non-blocking but should be traced and silenced.", "3 x 'Failed to load resource: 401' on every page load — appears to be a session-check endpoint firing on the public site as well; harmless but noisy in DevTools and could confuse debugging."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_marine_deploy.py",
+    "/app/test_reports/pytest/marine_deploy.xml"
+  ],
+  "action_items": [
+    "Trace and silence the 'Unexpected token <' JS parse error emitted on every page of the Marine public site (likely a static asset served with wrong content-type or a fallback HTML for a JSON endpoint).",
+    "Trace and either authenticate or gate the 3 x 401 requests fired on public pages (session-probe endpoint should short-circuit on unauthenticated public views).",
+    "Consider adding a cache-buster or SWR revalidation on /catalogue after admin mutations, or make Image URL optional in the admin product form."
+  ],
+  "critical_code_review_comments": [
+    "Marine deployed backend correctly excludes MongoDB _id in /api/products responses and enforces auth on write endpoints — good.",
+    "CORS is now exact-origin + credentials=true — matches the fix noted in the review request. Ensure the origin list stays scoped to the web service origin (do NOT regress to '*').",
+    "Admin form uses positional select/input placeholders (no labels, no data-testid) — makes automation and accessibility harder. Add data-testid to admin form controls and row action buttons (edit/delete)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_marine_deploy.py"
+  ],
+  "success_rate": {"backend": "100% (15/15 pytest, all Marine + Morning Soft + panel checks green)", "frontend": "~95% (all critical flows pass; only minor console-noise and one caching observation)"},
+  "test_credentials": "admin@mechanics.co.za / Mechanics#2026 (verified working). Wrong password verified to be rejected (401).",
+  "seed_data_creation": "None persisted. Created TEST_QA_Widget during admin CRUD test and deleted it afterwards — final product count restored to 39.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Marine Engine Store deploy is fully functional. Backend URL: https://marine-api-production-3b34.up.railway.app (39 seeded products, admin auto-seeded). Web URL: https://marine-web-production.up.railway.app. CORS ACAO is exact-origin, credentials enabled. Admin CRUD works via form (Add Product button opens modal; row action icons order: star/eye/pencil/trash). Only minor cleanup items remain (see action_items). Morning Soft and control panel are healthy — no regressions from the Marine deploy.",
+  "rca of the issue": "N/A — deploy is healthy. The two minor console-log observations (JS 'Unexpected token <' and 3x 401) do not affect user-facing functionality but should be traced by main agent for hygiene."
+}

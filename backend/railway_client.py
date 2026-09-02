@@ -254,7 +254,8 @@ async def get_runtime_logs(deployment_id: str, limit: int = 200) -> list[dict]:
 # ---------- Domains ----------
 async def create_service_domain(project_id: str, service_id: str, environment_id: str,
                                  target_port: Optional[int] = None) -> dict:
-    inp: dict[str, Any] = {"projectId": project_id, "serviceId": service_id, "environmentId": environment_id}
+    # NOTE: Railway rejects `projectId` in this input (HTTP 400) — send only svc/env.
+    inp: dict[str, Any] = {"serviceId": service_id, "environmentId": environment_id}
     if target_port is not None:
         inp["targetPort"] = target_port
     d = await gql("""
@@ -325,9 +326,16 @@ async def railway_up(source_dir: str, project_id: str, service_id: str,
     when supplied, otherwise falls back to the account token in RAILWAY_TOKEN.
     Streams no logs (uses --detach). Returns (ok, combined_output)."""
     env = os.environ.copy()
-    tok = token or _token()
-    env["RAILWAY_API_TOKEN"] = tok
-    env["RAILWAY_TOKEN"] = tok
+    if token:
+        # Project-scoped token: the CLI reads it from RAILWAY_TOKEN
+        env["RAILWAY_TOKEN"] = token
+        env.pop("RAILWAY_API_TOKEN", None)
+    else:
+        # Account/team token: the CLI reads it from RAILWAY_API_TOKEN only
+        env["RAILWAY_API_TOKEN"] = _token()
+        env.pop("RAILWAY_TOKEN", None)
+        env["RAILWAY_PROJECT_ID"] = project_id
+        env["RAILWAY_ENVIRONMENT_ID"] = environment_id
     # Defense-in-depth: ensure the CLI is on PATH regardless of supervisord's inherited env
     env["PATH"] = "/usr/local/bin:/usr/bin:/bin:" + env.get("PATH", "")
     railway_bin = shutil.which("railway", path=env["PATH"]) or "railway"

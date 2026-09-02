@@ -75,3 +75,38 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
   with restartPolicy ALWAYS(10). Verified /api/products 200 + shop renders.
 - Volume resize to 2GB REJECTED by Railway API (free plan caps at 500MB) → user must upgrade to
   Hobby for headroom. Remaining risk: 301MB journal leaves ~120MB free.
+
+## 2026-09-02 — Marine Engine Store (MECHANICS) deployed to Railway
+- Source workspace: https://vscode-b1934023-d18d-4984-8598-35e95ab30658.preview.emergentagent.com (pwd 50f22ee7)
+- Railway project `marine-engine-store` = 43dfcc06-7f65-4603-b075-6739823f4a80, env bef47ba9-a5b6-4e6e-a833-5b158fc04ff6
+  - marine-api  svc 3bf0ce60 → https://marine-api-production-3b34.up.railway.app
+  - marine-web  svc 159fc75b → https://marine-web-production.up.railway.app
+  - Mongo       svc 73af9060 (FTDC disabled + volume, crash-proofed from the start)
+  - project token 723a4db3-a40a-4bf6-986a-75ab651336ad (stored on both project records)
+- Panel project ids: `marine-api`, `marine-web`. Admin: admin@mechanics.co.za / Mechanics#2026
+- **Catalogue data migrated**: the code seed only had 39 products; the live preview had 828.
+  `/app/backend/scripts/migrate_marine_catalogue.py` copies them from the preview API into the
+  Railway deployment via the admin API (828/828, 0 failures, 51 brands).
+- Tested by testing agent (iteration_6.json): 15/15 backend tests, all frontend flows incl. admin CRUD,
+  contact enquiry, filters, mobile. No regressions on Morning Soft or the panel.
+
+### Panel bugs fixed while deploying
+- `railway_up()`: account tokens must go in RAILWAY_API_TOKEN (+RAILWAY_PROJECT_ID/ENVIRONMENT_ID);
+  putting an account token in RAILWAY_TOKEN makes the CLI say "Invalid RAILWAY_TOKEN".
+- `create_service_domain()`: Railway 400s if `projectId` is in ServiceDomainCreateInput — send only
+  serviceId + environmentId.
+- `get_project()` query shape was invalid (400) — simplified.
+- Frontend docker template must serve on `${PORT}` (`serve -s build -l ${PORT:-3000}`), otherwise
+  Railway shows "Application failed to respond".
+- CORS_ORIGINS must be the exact web origin (not `*`) for apps using `withCredentials: true`.
+- `POST /api/{pid}/refetch` no longer requires a project token (account token works).
+- Railway CLI is NOT persistent in the pod — reinstall with `npm i -g @railway/cli` if `railway` is missing.
+- `DELETE /api/projects/{id}` in the panel destroys the whole Railway project (this is how the
+  ai-blog/brand-serp project was lost — deleted from the panel UI). Needs a confirm + detach option.
+
+### Backlog
+- P1: type-to-confirm + "detach without destroying Railway" on project delete
+- P1: stream live Railway build logs into the panel
+- P1: Brand SERP Engine still undeployed (project b6cf615f ready; code-server password rotated)
+- P2: Morning Soft Mongo volume still 500MB — grow it in the Railway dashboard now that the plan is paid
+- P2: custom domain for Marine Engine Store
