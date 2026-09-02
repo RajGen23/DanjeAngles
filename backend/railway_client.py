@@ -301,17 +301,17 @@ async def create_custom_domain(project_id: str, service_id: str, environment_id:
     return d["customDomainCreate"]
 
 
-async def get_custom_domain_status(domain_id: str) -> dict:
+async def get_custom_domain_status(domain_id: str, project_id: str) -> dict:
     d = await gql("""
-      query($id: String!) {
-        customDomain(id: $id) {
+      query($id: String!, $projectId: String!) {
+        customDomain(id: $id, projectId: $projectId) {
           id domain status {
             certificateStatus verified
             dnsRecords { hostlabel recordType requiredValue currentValue status purpose zone fqdn }
           }
         }
       }
-    """, {"id": domain_id})
+    """, {"id": domain_id, "projectId": project_id})
     return d["customDomain"]
 
 

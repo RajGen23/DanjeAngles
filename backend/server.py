@@ -662,12 +662,20 @@ async def list_domains():
         rw_id = d.get("railway_domain_id")
         if rw_id:
             try:
-                live = await rw.get_custom_domain_status(rw_id)
+                owner = await db.projects.find_one({"id": d.get("project_id")},
+                                                   {"_id": 0, "railway_project_id": 1,
+                                                    "railway_project_token": 1})
+                if not owner or not owner.get("railway_project_id"):
+                    continue
+                if owner.get("railway_project_token"):
+                    rw.PROJECT_TOKEN.set(owner["railway_project_token"])
+                live = await rw.get_custom_domain_status(rw_id, owner["railway_project_id"])
                 st = live.get("status") or {}
                 d["dns_records"] = st.get("dnsRecords") or []
                 # Simplify status label
                 records = d["dns_records"]
-                if records and all(r.get("status") == "valid" for r in records):
+                ok_states = {"valid", "DNS_RECORD_STATUS_PROPAGATED"}
+                if records and all(r.get("status") in ok_states for r in records):
                     d["dns_status"] = "active"
                 elif records:
                     d["dns_status"] = "propagating"

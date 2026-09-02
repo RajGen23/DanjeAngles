@@ -110,3 +110,17 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
 - P1: Brand SERP Engine still undeployed (project b6cf615f ready; code-server password rotated)
 - P2: Morning Soft Mongo volume still 500MB — grow it in the Railway dashboard now that the plan is paid
 - P2: custom domain for Marine Engine Store
+
+### 2026-09-02 — "refetch not successful" investigation (marine-web)
+- Access log shows NO refetch request from the user's click reached the backend; the only two
+  marine-web refetch calls in the log were the agent's. Conclusion: the click happened during the
+  window when the Railway CLI binary was missing from the pod (`Errno 2: 'railway'`, which killed
+  the earlier marine-api attempts), or the browser confirm() dialog was dismissed.
+- Reproduced the UI flow with Playwright against the panel: refetch-btn-marine-web → POST 200 →
+  deployment 37baa470 built and went live in 72s (marine-web now v3). Refetch works end-to-end.
+- Fixed while investigating: `customDomain(id:)` query was missing the required `projectId` arg,
+  which made GET /api/domains spam 400s and always show custom domains as "propagating";
+  now passes the owning project's railway_project_id (+ project token) and treats
+  DNS_RECORD_STATUS_PROPAGATED as active → www.morningsofttissue.com shows active/SSL.
+- Ongoing risk: the Railway CLI is not persistent in this pod. If `which railway` is empty,
+  run `npm i -g @railway/cli` before any deploy/refetch.
