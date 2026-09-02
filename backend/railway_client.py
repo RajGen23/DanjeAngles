@@ -18,6 +18,8 @@ import subprocess
 from pathlib import Path
 from typing import Any, Optional
 
+import contextvars
+
 import httpx
 
 log = logging.getLogger(__name__)
@@ -36,18 +38,36 @@ class RailwayError(RuntimeError):
     pass
 
 
-async def gql(query: str, variables: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+PROJECT_TOKEN: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "railway_project_token", default=None)
+
+
+async def _post(headers: dict, query: str, variables: Optional[dict]) -> dict:
     async with httpx.AsyncClient(timeout=60) as c:
-        r = await c.post(
-            RAILWAY_URL,
-            headers={"Authorization": f"Bearer {_token()}", "Content-Type": "application/json"},
-            json={"query": query, "variables": variables or {}},
-        )
+        r = await c.post(RAILWAY_URL,
+                         headers={**headers, "Content-Type": "application/json"},
+                         json={"query": query, "variables": variables or {}})
     r.raise_for_status()
-    body = r.json()
-    if body.get("errors"):
-        raise RailwayError(json.dumps(body["errors"]))
-    return body["data"]
+    return r.json()
+
+
+async def gql(query: str, variables: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    """Runs a GraphQL call with the account token, falling back to the
+    project-scoped token (set via PROJECT_TOKEN) when the account token is not
+    authorized for the target project."""
+    attempts = [{"Authorization": f"Bearer {_token()}"}]
+    ptok = PROJECT_TOKEN.get()
+    if ptok:
+        attempts.append({"Project-Access-Token": ptok})
+    last: Optional[str] = None
+    for headers in attempts:
+        body = await _post(headers, query, variables)
+        if not body.get("errors"):
+            return body["data"]
+        last = json.dumps(body["errors"])
+        if "Not Authorized" not in last:
+            break
+    raise RailwayError(last or "unknown Railway error")
 
 
 # ---------- Projects ----------

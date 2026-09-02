@@ -46,3 +46,20 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
 - P1 Live runtime logs tab (`deploymentLogs` query)
 - P2 Cost meter per service (Railway metrics)
 - P2 Auth (JWT) for the panel itself
+
+## 2026-09-02 — Morning Soft outage fix + Brand SERP Engine deploy (in progress)
+- **Mongo crash (morningsofttissue.com products blank) — FIXED.** Root cause: mongod 7 FTDC thread
+  failed writing `/data/db/diagnostic.data/metrics.interim.temp` → `terminate()` → service CRASHED,
+  so `morningsoft-api` got ServerSelectionTimeoutError and returned 500 (browser reported it as CORS).
+  Fix: Mongo service start command set to
+  `mongod --bind_ip_all --setParameter diagnosticDataCollectionEnabled=false`,
+  restartPolicy set to ALWAYS (10 retries), Mongo + api redeployed. Products verified live.
+- **Railway account token (RAILWAY_TOKEN) can no longer reach the ai-blog/amused-creation project.**
+  `railway_client.gql` now falls back to the project-scoped token via `rw.PROJECT_TOKEN` contextvar
+  (set in `run_real_deploy`). Header used: `Project-Access-Token`.
+- **Railway CLI was missing in the forked pod** → installed with `npm i -g @railway/cli` (needed by `railway up`).
+- **Brand SERP Engine** (workspace vscode-c0c5d0d0…, pwd f2ee4833) — backend LIVE at
+  https://ai-blog-writer-5-api-production.up.railway.app/api/ ; reused ai-blog DB records
+  (`aiblog-api-2a0f4f87` → brand-serp-api, `aiblog-web-f4b73dfa` → brand-serp-web), Mongo reused,
+  `SEARCHAPI_KEY` injected. Frontend NOT deployed: Railway free plan resource limit (5/5 services).
+  GitHub mirror failed: PAT lacks repo-create permission.

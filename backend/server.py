@@ -153,6 +153,10 @@ async def run_real_deploy(deployment_id: str, project_local_id: str, zip_path: s
             await _set_progress(deployment_id, 100, "failed")
             return
 
+        # Project-scoped token fallback for accounts whose token can't reach this project
+        if project.get("railway_project_token"):
+            rw.PROJECT_TOKEN.set(project["railway_project_token"])
+
         # Create Railway project + service if not present
         rw_project_id = project.get("railway_project_id")
         rw_service_id = project.get("railway_service_id")
