@@ -1,0 +1,48 @@
+{
+  "summary": "BagBuddy Railway deploy fully validated end-to-end. Pytest: 51/52 pass (1 accepted-behaviour delta: /api/pricing/quote returns 400 for unknown promo codes rather than 200 with discount=0). Backend: /api/, /api/airports (IAH+HOU), /api/zones (A/B/C/D), /api/pricing/quote (base 39 + airport 8 = 47 subtotal, 8.25% tax verified), POST /api/bookings 201 with BB-HOU-###### id, POST /api/track 200/403/404 all correct, POST /api/agent-applications 201 (PENDING), POST /api/messages 201 (NEW), POST /api/auth/login 200 with access_token cookie, /api/auth/me 401 unauth. All six /api/admin/* endpoints reject unauth (401/403) and succeed with admin session (200) — no MongoDB _id leaks anywhere. Promo codes WELCOME20/HOUSTON10/HOTEL25 all present. CORS: exact-origin echoed (https://bagbuddy-web-production.up.railway.app), Access-Control-Allow-Credentials=true. Frontend: home renders hero 'Your Bags. Our Journey.' + stats/services/airports/how-it-works/FAQ; 6-step booking wizard driven end-to-end via data-testid and produced live booking BB-HOU-000133 with WELCOME20 applied (57→49.36); tracking /track returned that booking with pins/timeline; admin @ /admin logged in with admin@bagbuddy.com / BagBuddy2026! and Overview/Bookings/Agents/Inbox/Promotions all render with rich data-testid coverage; wrong password rejected with 'Invalid email or password'. Mobile 390x844: home + /book + hamburger menu — no horizontal overflow. All 14 SPA routes tested via HTTP hard-refresh return 200 HTML (index fallback). Regression: control panel /api/projects lists bagbuddy-api + bagbuddy-web among 8+ projects; DakEvents vendors total (>=1333), Marine (828+ products) and Morning Soft /shop all green.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/pricing/quote", "issue": "Unknown promo codes (e.g. 'NOT_A_REAL_CODE') return 400 instead of a 200 with discount=0/promo_code=null. Not a blocker (frontend surfaces this as a toast), but worth documenting — the wizard uses the /pricing/quote path for both live totals AND promo validation."},
+      {"endpoint": "GET /api/zones", "issue": "Zones seeded are A/B/C/D (four zones), while the review request enumerates A/B/C. Not a bug — code and delivery-form both offer D. Flagging so the spec / marketing copy stays in sync."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Booking wizard Step 6 first render", "issue": "In one of my three runs the price panel showed a transient 'Network Error' with $0.00 subtotal/total on first mount of the confirm step; a subsequent user action (typing promo, toggling option) recovered it. Could not reproduce reliably. Suggest a retry-with-backoff on the initial /api/pricing/quote call from the review step and clearer messaging ('Recalculating…' spinner) so the user never sees a $0 quote.", "affected_selectors": ["[data-testid=\"price-error\"]", "[data-testid=\"price-total\"]"]}
+    ],
+    "design_issues": [
+      {"screen": "Booking wizard steps 2/3", "issues": ["Uses the browser-native <input type=date> / <input type=time> pickers (pickup-arrival-date, pickup-date, delivery-time, etc.) rather than a shadcn/date-picker component — inconsistent look between Chrome/Safari/Firefox and against the app's dark theme. Consider a shared calendar/time popover for visual parity."]},
+      {"screen": "Global (all pages, book wizard included)", "issues": ["Two 'Unexpected token <' pageerrors fire on every route load — the SPA server returns index.html (200) for a missing static asset, so an internal fetch/eval of that fake JS chokes. Cosmetic today (main bundle still boots) but will bite lazy-loaded chunks. Suggest returning 404 for non-existent /static/* paths and only falling back to index.html for non-static routes."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_bagbuddy_deploy.py",
+    "/app/test_reports/pytest/bagbuddy_deploy.xml"
+  ],
+  "action_items": [
+    "Optional: make POST /api/pricing/quote tolerant of unknown promo codes (return 200 with promo_code=null, discount=0) so the UI can render a 'Promo not valid' inline chip without a red toast.",
+    "Investigate the transient 'Network Error' on the confirm step initial mount and add a retry / clearer loading state around the price panel.",
+    "Configure the frontend static server to return 404 for missing /static/* paths — currently it serves index.html, which produces the 'Unexpected token <' pageerrors seen on every route.",
+    "Consider replacing the browser-native date/time inputs in the booking wizard with a themed shadcn picker.",
+    "Left-behind test data (production DB): booking BB-HOU-000133 (customer QA TEST-UI, qa.ui.bagbuddy@example.com); ~4 other 'QA TEST' bookings from the pytest runs; one 'QA TEST' agent-application (qa.agent@example.com); one 'QA TEST' contact message. Prune when convenient."
+  ],
+  "critical_code_review_comments": [
+    "public_booking() correctly strips _id and computes timeline + service_label — good.",
+    "Auth cookie is set with SameSite=None; Secure; HttpOnly — correct for cross-site frontend on *.up.railway.app; matches the withCredentials flag on the axios client.",
+    "compute_quote heavy-bag detection greps for the substrings '50' or '70' inside the weight string — this will misfire on values like '150 lb' or '70th percentile'. Consider parsing the weight or matching a bucketed enum.",
+    "Booking counter uses find_one_and_update with $inc + upsert — good, race-safe. Booking id format BB-HOU-###### is well-defined.",
+    "Frontend has excellent data-testid coverage on every wizard step, admin dashboard tiles, promo input and terms checkboxes — makes E2E automation trivial. Kudos."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_bagbuddy_deploy.py"
+  ],
+  "success_rate": {"backend": "98% (51/52 pytest — the 1 non-pass is an intentional behaviour choice, not a defect)", "frontend": "100% of exercised flows (home, 6-step booking wizard w/ WELCOME20 promo → BB-HOU-000133, /track, admin login+overview+bookings, wrong-password rejection, mobile viewport w/o overflow, hamburger menu, all 14 SPA routes hard-refresh)"},
+  "test_credentials": "admin@bagbuddy.com / BagBuddy2026! — OK (200 login, cookie set). Wrong password → 401 with 'Invalid email or password'. Did not trigger lockout (kept to a single failure to preserve the runtime).",
+  "seed_data_creation": "Real rows created against production Mongo: booking BB-HOU-000133 via UI (WELCOME20 applied, total $49.36), booking(s) BB-HOU-000131/132 via pytest, 1 agent application qa.agent@example.com, 1 contact message qa.msg@example.com. All prefixed 'QA TEST' as instructed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "BagBuddy stack is production-green. Backend base https://bagbuddy-api-production.up.railway.app, frontend https://bagbuddy-web-production.up.railway.app. Regression harness lives at /app/backend/tests/test_bagbuddy_deploy.py — run with pytest and it exercises health, pricing, bookings+track (real POST, so it creates rows), forms, auth, admin (all 6 endpoints parametrized), CORS, frontend static routes and cross-project regression (control panel + DakEvents + Marine + Morning Soft). Admin auth flow is cookie-based (access_token, SameSite=None, HttpOnly) — use requests.Session() to persist between login and admin calls. Bag counter has already advanced past BB-HOU-000133 in the production DB.",
+  "rca of the issue": "No blocking issue. The two orange flags: (1) unknown promo codes return 400 — server-side raise HTTPException in the compute path treats a bad code as a validation error instead of a soft null; UX consequence is a toast rather than a graceful inline message; (2) SPA static server serves index.html on missing /static/* paths, generating the 'Unexpected token <' pageerrors. Both are cosmetic on this deploy."
+}

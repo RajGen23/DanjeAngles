@@ -169,3 +169,21 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
   gd6nyke7.up.railway.app; SSL stays pending until the user updates DNS
 - P2: Brand SERP Engine still undeployed (workspace password rotated)
 - P2: custom domains for Marine and DakEvents
+
+## 2026-09-07 — Bag Buddy deployed to Railway
+- Source workspace: vscode-6f66f01a-c19e-48b1-9abd-c4896b8d9867 (pwd 78c84748); CRA + shadcn + FastAPI
+- Railway project `bagbuddy` e098b545-4e79-4d56-93d1-7f1c5c08f96e, env 734fc8fa-bc08-46dd-9710-1f2548a22c36
+  - bagbuddy-api → https://bagbuddy-api-production.up.railway.app
+  - bagbuddy-web → https://bagbuddy-web-production.up.railway.app
+  - Mongo svc f95fc378 (FTDC off + volume + restart ALWAYS)
+- Airports/zones/promo codes and the admin account are seeded by the app on startup (backend/seed.py),
+  so no data migration was needed. CORS_ORIGINS set to the exact web origin (app uses withCredentials).
+- Provisioning script: `/app/backend/scripts/setup_bagbuddy.py`
+- Tested (iteration_8.json): 51/52 backend pass, no critical issues. Booking wizard end-to-end
+  (live booking BB-HOU-000133 with WELCOME20 → $49.36), tracking, agent application, contact form,
+  admin dashboard (Overview/Bookings/Agents/Inbox/Promotions), lockout, mobile, all 14 SPA routes on
+  hard refresh. No regressions on DakEvents / Marine / Morning Soft / the panel.
+- Known non-blockers: POST /api/pricing/quote returns 400 (not 200 + discount=0) for unknown promo codes;
+  `serve -s` returns index.html for missing /static/* which logs an "Unexpected token <" console error
+  on every route; QA left ~5 'QA TEST' bookings + 1 agent application + 1 message in the prod DB and the
+  app exposes no delete endpoints for them (admin API is read-only for bookings/messages).
