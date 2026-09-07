@@ -131,3 +131,41 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
   `railway up`. The deployment log records "Railway CLI was missing — reinstalled it automatically".
 - Verified by deleting /usr/bin/railway + /usr/lib/node_modules/@railway and triggering a real
   marine-web refetch: CLI reinstalled itself and the deploy went live (v4).
+
+## 2026-09-07 — DakEvents deployed to Railway (Expo Router + FastAPI)
+- Source workspace: vscode-dd065ae8-4dfa-4fe9-833e-16a5f7ecc84e (pwd efd95d63);
+  data source of truth = https://shaadi-connect-27.preview.emergentagent.com
+- Railway project `dakevents` c3dc6815-23b2-4242-8492-2d3b503e97f5, env fde1182d-82db-4d73-8799-753bb360ccfb
+  - dakevents-api svc 9ee32606 → https://dakevents-api-production.up.railway.app
+  - dakevents-web svc ab195e26 → https://dakevents-web-production.up.railway.app
+  - Mongo svc e1694e00 (FTDC disabled + volume + restart ALWAYS)
+  - project token stored on both panel project records (`dakevents-api`, `dakevents-web`)
+- Data migrated: 1339 vendors (WP auto-sync from dakevents.ci + 24-vendor delta from preview),
+  17 categories, 8 events, 6 offers, admin settings (login hero, home hero, promo, app config),
+  plus the demo user test@dak.demo. Script: `/app/backend/scripts/migrate_dakevents.py`.
+- Tested (iteration_7.json): 27/29 backend pass on first run; the one real bug (demo user
+  test@dak.demo 401) was fixed by adding demo-account registration to the migration script —
+  all 4 accounts now log in 200. Frontend flows all pass incl. /admin CMS, /superadmin,
+  hard-refresh deep links and mobile. No regressions on Marine or Morning Soft.
+
+### Panel capability added: Expo Router support
+- `emergent_fetcher.discover_expo_sources(app_url)` reads the Metro dev source map
+  (`/node_modules/expo-router/entry.map?platform=web&dev=true&lazy=false`) of the RUNNING preview
+  and returns every non-node_modules source path. Needed because expo-router routes are file-based
+  and have no import graph from a single entry (a plain fetch returned only 6 files).
+- `fetch_workspace(..., extra_paths=[...])`; Expo seeds (app.json/tsconfig/metro/babel) added;
+  app.json's `./assets/...` icon+splash references are auto-queued.
+- `POST /api/projects/{pid}/refetch` runs the Expo discovery when the project has `expo_preview_url`.
+- Expo web Docker template: node20 → `npx expo export --platform web --output-dir dist` →
+  `serve -s dist -l $PORT`; the fetched `frontend/.env` is REPLACED at build time with the Railway
+  API URL (otherwise the build bakes in the Emergent preview URL).
+- Gotcha: the Emergent code-server idles to zero and returns a "Starting IDE..." placeholder; only a
+  real browser session wakes it. Server-side polling for 12+ minutes did not.
+
+### Backlog (updated)
+- P1: type-to-confirm + "detach without destroying Railway" on project delete
+- P1: stream live Railway build logs into the panel
+- P2: Morning Soft CNAME drift — Cloudflare points at 4z6ndoy0.up.railway.app but Railway now expects
+  gd6nyke7.up.railway.app; SSL stays pending until the user updates DNS
+- P2: Brand SERP Engine still undeployed (workspace password rotated)
+- P2: custom domains for Marine and DakEvents

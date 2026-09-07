@@ -118,6 +118,22 @@ def _resolve_py(mod: str, workspace_root: str) -> list[str]:
     return [base + ".py", base + "/__init__.py"]
 
 
+async def discover_expo_sources(app_url: str, workspace_root: str = "/app") -> list[str]:
+    """Expo Router apps have no import graph from a single entry (routes are
+    file-based), so we read the Metro dev source map of the running preview and
+    take every non-node_modules source path."""
+    base = app_url.rstrip("/")
+    url = (f"{base}/node_modules/expo-router/entry.map"
+           "?platform=web&dev=true&hot=false&lazy=false&transform.routerRoot=app")
+    async with httpx.AsyncClient(timeout=300, headers={"User-Agent": UA}) as c:
+        r = await c.get(url)
+    if r.status_code != 200:
+        raise EmergentFetchError(f"Expo source map fetch failed: HTTP {r.status_code}")
+    root = workspace_root.rstrip("/") + "/"
+    return sorted({s for s in r.json().get("sources", [])
+                   if s.startswith(root) and "node_modules" not in s})
+
+
 def _seed_paths(workspace_root: str, subdir: Optional[str] = None) -> list[str]:
     """Build seed list based on which subdir of the workspace we're fetching."""
     root = workspace_root.rstrip("/")
@@ -141,6 +157,12 @@ def _seed_paths(workspace_root: str, subdir: Optional[str] = None) -> list[str]:
         "frontend/public/robots.txt", "frontend/public/favicon.ico",
         "frontend/src/App.js", "frontend/src/App.css",
         "frontend/src/index.js", "frontend/src/index.css",
+        # Expo / React Native (expo-router) projects
+        "frontend/app.json", "frontend/tsconfig.json", "frontend/babel.config.js",
+        "frontend/metro.config.js", "frontend/expo-env.d.ts",
+        "frontend/app/_layout.tsx", "frontend/app/index.tsx",
+        "frontend/assets/images/icon.png", "frontend/assets/images/favicon.png",
+        "frontend/assets/images/splash.png", "frontend/assets/images/adaptive-icon.png",
     ]
     for rel in candidates:
         if _under(rel):
@@ -170,6 +192,7 @@ def _seed_paths(workspace_root: str, subdir: Optional[str] = None) -> list[str]:
 async def fetch_workspace(url: str, password: str, workspace_root: str = "/app",
                           subdir: Optional[str] = None,
                           dest: Optional[Path] = None,
+                          extra_paths: Optional[list[str]] = None,
                           max_files: int = 2000) -> Path:
     """Fetch a workspace subtree to a local directory. Returns the dest path.
 
@@ -183,7 +206,7 @@ async def fetch_workspace(url: str, password: str, workspace_root: str = "/app",
 
     visited: set[str] = set()
     saved: set[str] = set()
-    queue: list[str] = _seed_paths(workspace_root, subdir)
+    queue: list[str] = _seed_paths(workspace_root, subdir) + list(extra_paths or [])
 
     async with httpx.AsyncClient(timeout=15, headers={
         "User-Agent": UA, "Cookie": cookie, "Referer": url,
@@ -257,6 +280,12 @@ async def fetch_workspace(url: str, password: str, workspace_root: str = "/app",
                         for cand in _resolve_js(m.group(1), path, workspace_root):
                             if cand not in visited:
                                 queue.append(cand)
+                elif lower.endswith("app.json"):
+                    # Expo config references icons/splash that nothing imports
+                    for m in re.finditer(r'"\./([A-Za-z0-9_./-]+\.(?:png|jpg|jpeg|ico))"', text):
+                        cand = f"{workspace_root.rstrip('/')}/frontend/{m.group(1)}"
+                        if cand not in visited:
+                            queue.append(cand)
                 elif lower.endswith(".py"):
                     for m in PY_IMPORT.finditer(text):
                         mod = m.group(1) or m.group(2)

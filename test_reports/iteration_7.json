@@ -1,0 +1,42 @@
+{
+  "summary": "DakEvents Railway deploy + regression validated. Backend pytest: 27/29 pass. Railway DakEvents API healthy at https://dakevents-api-production.up.railway.app (GET /api/ -> {service:dakevents,status:ok}); /api/vendors paginates with total=1339 (>=1333 threshold), no MongoDB _id leaked; /api/products, /api/public-events, /api/offers, /api/ideas, /api/trends, /api/vendors/categories all 200; POST /api/auth/login succeeds for admin@dakevents.demo, superadmin@dakevents.com, vendor@dakevents.demo but FAILS 401 for test@dak.demo/test123 (works on source preview → user not migrated); admin endpoints (/api/admin/stats,/api/admin/vendors,/api/admin/users) correctly 401 unauth and 200 with admin bearer; data-parity IDs of events/offers overlap the source preview. Deep-link hard refresh of /, /admin, /superadmin all return 200 HTML. Frontend (Playwright): login page renders DakEvents logo + hero + FR/EN toggle, admin login lands on home with the 5-tab bar (Accueil/Prestataires/Réservations/Événements/Profil), Prestataires opens 'Annuaire des prestataires' with 17 category tiles, /admin CMS shows 1340 vendors / 17 categories / 8 events / 5 products / 2 users / Manage grid (Categories/Vendors/Events/Tickets/Users/Reviews/Conversations), /superadmin loads 'Super Admin' hero-image manager with 'Image de l'écran de connexion' + 'Images d'accueil (diaporama)'. All API calls fire against dakevents-api-production Railway origin (not the Emergent preview). Mobile 390x844 login has no horizontal overflow. Regression: Marine api (/api/products, 828 products via list) and web (/catalogue) 200; Morning Soft api and /shop 200; control panel /api/projects lists dakevents-api + dakevents-web among 6+ projects; /api/stats,/api/resources,/api/domains all 200.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/auth/login (dakevents Railway)", "issue": "Demo user test@dak.demo / test123 returns 401 'Invalid email or password'. Same credentials succeed on the source preview (https://shaadi-connect-27.preview.emergentagent.com) and return a full user record (user_id usr_0bf371f14cb5, name 'Aïcha Test', role vendor). The user was NOT copied into the Railway MongoDB by migrate_dakevents.py. Admin, super-admin and vendor demo accounts all migrated correctly.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/domains (control panel, morningsoft-web)", "issue": "www.morningsofttissue.com is listed but ssl=false and dns_status='propagating'; the CNAME currentValue (4z6ndoy0.up.railway.app) does not match requiredValue (gd6nyke7.up.railway.app). The review request expected 'ssl true'. Not caused by DakEvents deploy — pre-existing Morning Soft domain state — but the panel's UI/API surface should surface this delta clearly."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "DakEvents login (/login)", "issues": ["Both the page heading and the primary submit button use the identical text 'Connexion' — hurts accessibility, screen-reader ambiguity, and test automation (had to fall back to .last). Consider labelling the button 'Se connecter' or adding an aria-label."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_dakevents_deploy.py",
+    "/app/test_reports/pytest/dakevents_deploy.xml"
+  ],
+  "action_items": [
+    "Re-run /app/backend/scripts/migrate_dakevents.py (or add a step to it) to copy the demo user test@dak.demo (password test123) from the source preview into the Railway users collection. Verify by POST /api/auth/login on dakevents-api-production returns 200.",
+    "Optional: investigate morningsoft-web custom-domain DNS drift — currentValue CNAME points at 4z6ndoy0.up.railway.app but Railway now expects gd6nyke7.up.railway.app; user's Cloudflare record needs updating before ssl will flip true.",
+    "Optional UX: disambiguate the two 'Connexion' strings on the login screen (heading vs. submit button)."
+  ],
+  "critical_code_review_comments": [
+    "migrate_dakevents.py appears to migrate admin/super-admin/vendor users but omits the plain demo user test@dak.demo — either add a whitelist entry or migrate the full users collection (filtered) so demo QA credentials keep working after redeploy.",
+    "DakEvents API correctly excludes MongoDB _id and enforces auth on /api/admin/* — good. Auth uses a plain 'token' field in the login response (not access_token) — fine but worth documenting for downstream integrations.",
+    "Frontend (RN Web) has no data-testid attributes — flagged again as it makes E2E automation fragile; French/English text is the only stable selector today."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_dakevents_deploy.py"
+  ],
+  "success_rate": {"backend": "93% (27/29 pytest — 1 real bug on demo user login, 1 domain-ssl assertion that reflects a real Morning Soft DNS state)", "frontend": "100% of exercised flows (admin login, tabs, Prestataires directory, /admin CMS, /superadmin hero manager, mobile viewport, hard-refresh deep links)"},
+  "test_credentials": "admin@dakevents.demo / Admin@2026 (OK), superadmin@dakevents.com / DakSuper@2026 (OK), vendor@dakevents.demo / vendor123 (OK via API). test@dak.demo / test123 FAILS on Railway (401) but SUCCEEDS on the source preview — treated as a migration miss.",
+  "seed_data_creation": "None. All tests read-only.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "DakEvents is deployed and functional on Railway. API: https://dakevents-api-production.up.railway.app. Web: https://dakevents-web-production.up.railway.app. Vendor total was 1339 at test time (WP auto-sync may bump this — don't flag drift unless <1333). The only real deploy bug is the missing demo user test@dak.demo; three other accounts migrated fine. /admin and /superadmin hard-refresh both work (Expo static export + `serve` is correctly falling back to index.html). Marine and Morning Soft not touched and still green.",
+  "rca of the issue": "test@dak.demo login RCA: source preview /api/auth/login returns a valid JWT and user record (role=vendor, user_id=usr_0bf371f14cb5, created 2026-05-28), so the account exists in the source Mongo. Railway /api/auth/login returns 401 'Invalid email or password' — meaning either (a) the users collection on Railway does not have this user, or (b) the password hash was stored differently. migrate_dakevents.py per the review notes migrates vendors/categories/events/offers/admin settings but the file summary does NOT mention copying the users collection. Fix: extend the migration to copy users (or at least the four demo accounts) from source Mongo to Railway Mongo, preserving the existing hashed_password field verbatim so bcrypt verification keeps working."
+}

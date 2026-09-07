@@ -831,10 +831,19 @@ async def refetch_and_deploy(pid: str):
 
     # Fetch → zip → kick off same deploy background task
     try:
+        extra: list[str] = []
+        expo_url = project.get("expo_preview_url")
+        if expo_url:
+            # Expo Router: routes are file-based, so discover the real file list
+            # from the running preview's Metro source map.
+            extra = await ef.discover_expo_sources(
+                expo_url, workspace_root=project.get("emergent_workspace_root", "/app"))
+            logger.info("refetch: discovered %d expo sources", len(extra))
         dest = await ef.fetch_workspace(
             src_url, src_pwd,
             workspace_root=project.get("emergent_workspace_root", "/app"),
             subdir=project.get("emergent_subdir"),
+            extra_paths=extra,
         )
     except Exception as e:
         raise HTTPException(500, f"Fetch failed: {e}")
