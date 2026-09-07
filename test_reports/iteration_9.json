@@ -1,0 +1,39 @@
+{
+  "summary": "Focused verification of the logo-fetch bug fix on live BagBuddy + full regression. Logo bug is FIXED: GET https://bagbuddy-web-production.up.railway.app/bagbuddy-logo.png returns image/png, 277619 bytes, PNG magic \\x89PNG\\r\\n\\x1a\\n (NOT the HTML fallback). In-browser <img alt=\"BagBuddy\"> reports naturalWidth=510, naturalHeight=660, complete=true on: home (desktop 1920x1080), /admin login, admin dashboard after login (admin@bagbuddy.com / BagBuddy2026!), hard-refresh of /book and /track, and mobile viewport 390x844. Bundle sanity: /static/js/*.js bundle references /bagbuddy-logo.png. Regression pytest: 58/59 pass (1 pre-existing: unknown promo -> 400 vs expected 200 with discount=0 — documented in iteration_8, non-blocker). All health, pricing (base 39 + airport 8 = 47), booking (BB-HOU-###### created), track (200/403/404), agent-application, message, auth (login/wrong-pw/me), all 6 /api/admin/* endpoints (unauth 401/403, auth 200, no _id leaks), CORS exact-origin + credentials true, 14 SPA routes 200, control panel (/api/projects lists bagbuddy-api + bagbuddy-web among 8+), DakEvents (vendors total>=1333), Marine (>=800 products), Morning Soft /shop — all green.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/pricing/quote", "issue": "Unknown promo code still returns 400 instead of 200 with discount=0 / promo_code=null. Pre-existing from iteration_8, not caused by this fix."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "All routes", "issues": ["The 'Unexpected token <' pageerror still fires on every navigation (SPA server returns index.html for a missing static asset that some code path tries to eval). Pre-existing from iteration_8, cosmetic — main bundle still boots and logo now loads correctly."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_bagbuddy_logo.py",
+    "/app/backend/tests/test_bagbuddy_deploy.py",
+    "/app/test_reports/pytest/iteration_9.xml"
+  ],
+  "action_items": [
+    "None blocking. Logo bug is genuinely fixed on the live site. Optional cleanup items from iteration_8 (unknown-promo 400 -> 200, SPA static 404 handling) remain open but are unrelated to this fix."
+  ],
+  "critical_code_review_comments": [
+    "emergent_fetcher.py fix is correct in principle — the regex (?:src|href)=\"/([A-Za-z0-9_-]+\\.(png|jpg|jpeg|svg|webp|ico))\" catches the common case. Consider also: single-quoted attrs (src='/foo.png'), template literals in JS (`/${logo}.png`), CSS url('/x.png') references, and next/image style imports. As-is it'll miss dynamically composed URLs, but for the standard React/Vite `src=\"/asset\"` pattern it's solid.",
+    "The regex only matches assets rooted at /, which is exactly what CRA/Vite public/ serves — appropriate scope. Multi-level public paths (public/img/foo.png) would need '/([A-Za-z0-9_/-]+\\.(...))'.",
+    "public/ asset walking should probably be a one-time directory sweep at the end of fetch_workspace rather than a text-regex — that would also catch fonts, manifests, robots.txt, favicons referenced from <link> tags or CSS. Current regex fix is a good targeted patch though."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_bagbuddy_logo.py (new — 4 tests, all pass)"
+  ],
+  "success_rate": {"backend": "98% (58/59 pytest — 1 pre-existing non-defect)", "frontend": "100% of logo checks (6 pages/viewports, all naturalWidth=510)"},
+  "test_credentials": "admin@bagbuddy.com / BagBuddy2026! — login OK.",
+  "seed_data_creation": "1 new booking created by pytest (BB-HOU-### QA TEST), 1 agent application, 1 contact message — all 'QA TEST' prefixed as instructed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Logo bug fixed and confirmed via image bytes + naturalWidth in-browser. Regression harness at /app/backend/tests/test_bagbuddy_deploy.py and /app/backend/tests/test_bagbuddy_logo.py. All non-BagBuddy apps (DakEvents, Marine, Morning Soft, control panel) untouched and passing.",
+  "rca of the issue": "Root cause per the request: emergent_fetcher's BFS walked only JS/Python import graphs, so public/ assets referenced by URL string (src=\"/bagbuddy-logo.png\") were never fetched into the deploy tarball. Fix: added a regex pass over .js/.jsx/.ts/.tsx/.html files matching (?:src|href)=\"/([A-Za-z0-9_-]+\\.(png|jpg|jpeg|svg|webp|ico))\" that queues matches at {workspace_root}/frontend/public/<name>. Post-fix the workspace fetch went 59 -> 62 files including the 277619-byte logo, the rebuild deployed the file, and Railway now serves it as image/png with the PNG magic header rather than the SPA index.html fallback."
+}

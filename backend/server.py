@@ -238,13 +238,18 @@ async def run_real_deploy(deployment_id: str, project_local_id: str, zip_path: s
         await db.deployments.update_one({"id": deployment_id}, {"$set": {"railway_deployment_id": rw_deployment_id}})
         seen: set = set()
         terminal = {"SUCCESS", "FAILED", "CRASHED", "REMOVED", "SKIPPED"}
-        for i in range(180):  # up to ~9 min
-            await asyncio.sleep(3)
+        backoff = 6  # Railway rate-limits aggressive polling; start gentle
+        for i in range(120):  # up to ~15 min at the default interval
+            await asyncio.sleep(backoff)
+            rate_limited = False
             try:
                 logs = await rw.get_build_logs(rw_deployment_id, limit=200)
             except Exception as e:
                 logs = []
-                await _log(deployment_id, "info", f"(log fetch retry: {e})")
+                if "429" in str(e):
+                    rate_limited = True
+                else:
+                    await _log(deployment_id, "info", f"(log fetch retry: {e})")
             for row in logs:
                 key = (row.get("timestamp"), row.get("message"))
                 if key in seen:
@@ -304,14 +309,30 @@ async def run_real_deploy(deployment_id: str, project_local_id: str, zip_path: s
                         await db.projects.update_one({"id": project_local_id}, {"$set": {"status": "failed"}})
                     return
             except Exception as e:
-                await _log(deployment_id, "info", f"(status poll retry: {e})")
+                if "429" in str(e):
+                    rate_limited = True
+                else:
+                    await _log(deployment_id, "info", f"(status poll retry: {e})")
+            if rate_limited:
+                backoff = min(backoff * 2, 120)
+                if i % 5 == 0:
+                    await _log(deployment_id, "info",
+                               f"Railway API rate-limited — backing off to {backoff}s "
+                               "(the build keeps running on Railway)")
+            else:
+                backoff = 6
 
         # Timeout
         await _log(deployment_id, "error", "Deployment polling timed out")
         await _set_progress(deployment_id, 100, "failed")
     except Exception as e:
         logger.exception("deploy failed")
-        await _log(deployment_id, "error", f"Fatal: {e}")
+        if "429" in str(e):
+            await _log(deployment_id, "error",
+                       "Railway API rate limit hit before the upload could start — "
+                       "wait a few minutes and click Refetch again. Nothing was deployed.")
+        else:
+            await _log(deployment_id, "error", f"Fatal: {e}")
         await _set_progress(deployment_id, 100, "failed")
     finally:
         # Cleanup extracted source

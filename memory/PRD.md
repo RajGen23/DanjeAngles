@@ -187,3 +187,21 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
   `serve -s` returns index.html for missing /static/* which logs an "Unexpected token <" console error
   on every route; QA left ~5 'QA TEST' bookings + 1 agent application + 1 message in the prod DB and the
   app exposes no delete endpoints for them (admin API is read-only for bookings/messages).
+
+### 2026-09-07 — BagBuddy logo bug FIXED (root cause was in the panel's fetcher)
+- Symptom: broken logo image on the deployed BagBuddy site.
+- Root cause: `emergent_fetcher.fetch_workspace()` walked only the JS/Python IMPORT graph, so files in
+  `frontend/public/` referenced by URL string (`src="/bagbuddy-logo.png"`) were never fetched. The
+  deployed build had no logo file and `serve -s` returned index.html for it.
+- Fix: the BFS now also scans .js/.jsx/.ts/.tsx/.html for
+  `(?:src|href)="/<name>.(png|jpg|jpeg|svg|webp|ico)"` and queues
+  `{workspace_root}/frontend/public/<name>`. Refetch went 59 → 62 files, logo included.
+- Verified by testing agent (iteration_9.json): /bagbuddy-logo.png serves image/png 277619 bytes,
+  in-browser naturalWidth 510x660 on home, /admin login, admin dashboard, hard-refreshed /book and
+  /track, and mobile. 58/59 regression checks pass; no criticals. Other three apps + panel green.
+- An earlier attempt that base64-injected the PDF logo into the Docker template was REVERTED (Docker
+  rejects any Dockerfile line > 65535 bytes; the workspace file is the right source anyway).
+  The owner's PDF + a 512px PNG are kept in /app/memory/assets/ for reference.
+- Also hardened: the Railway build poll loop now backs off exponentially on HTTP 429 (it was polling
+  every 3s and burning the account quota for ~25 minutes), and a 429 before upload now reports
+  "nothing was deployed" instead of a raw Fatal.

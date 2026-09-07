@@ -271,6 +271,11 @@ async def fetch_workspace(url: str, password: str, workspace_root: str = "/app",
                     text = body.decode("utf-8", errors="ignore")
                 except Exception:
                     continue
+                if lower.endswith((".js", ".jsx", ".ts", ".tsx", ".html")):
+                    for m in re.finditer(r'(?:src|href)="/([A-Za-z0-9_-]+\.(?:png|jpg|jpeg|svg|webp|ico))"', text):
+                        cand = f"{workspace_root.rstrip('/')}/frontend/public/{m.group(1)}"
+                        if cand not in visited:
+                            queue.append(cand)
                 if lower.endswith((".js", ".jsx", ".ts", ".tsx")):
                     for m in JS_IMPORT.finditer(text):
                         for cand in _resolve_js(m.group(1), path, workspace_root):
