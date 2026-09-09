@@ -118,6 +118,35 @@ def _resolve_py(mod: str, workspace_root: str) -> list[str]:
     return [base + ".py", base + "/__init__.py"]
 
 
+async def recover_from_sourcemap(app_url: str, dest: Path, workspace_root: str = "/app",
+                                  subdir: str = "frontend") -> int:
+    """Rebuild frontend sources from the running CRA dev-server bundle source map.
+
+    Webpack dev source maps embed `sourcesContent`, so this recovers the real files
+    even when the Emergent code-server is hibernating. Returns the file count.
+    """
+    base = app_url.rstrip("/")
+    async with httpx.AsyncClient(timeout=300, headers={"User-Agent": UA}) as c:
+        r = await c.get(f"{base}/static/js/bundle.js.map")
+    if r.status_code != 200:
+        raise EmergentFetchError(f"bundle source map fetch failed: HTTP {r.status_code}")
+    data = r.json()
+    prefix = f"{workspace_root.rstrip('/')}/{subdir.strip('/')}/"
+    saved = 0
+    for src, content in zip(data.get("sources", []), data.get("sourcesContent") or []):
+        if not content or not src.startswith(prefix) or "node_modules" in src:
+            continue
+        rel = src[len(prefix):]
+        if rel.startswith("webpack/"):
+            continue
+        out = dest / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(content)
+        saved += 1
+    log.info("sourcemap recovery: %d files into %s", saved, dest)
+    return saved
+
+
 async def discover_expo_sources(app_url: str, workspace_root: str = "/app") -> list[str]:
     """Expo Router apps have no import graph from a single entry (routes are
     file-based), so we read the Metro dev source map of the running preview and

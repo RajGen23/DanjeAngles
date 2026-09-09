@@ -205,3 +205,13 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
 - Also hardened: the Railway build poll loop now backs off exponentially on HTTP 429 (it was polling
   every 3s and burning the account quota for ~25 minutes), and a 429 before upload now reports
   "nothing was deployed" instead of a raw Fatal.
+
+
+### 2026-09-09 — Viara deployed to Railway (React CRA + FastAPI)
+- App: flights/hotels/cars meta-search (ZRH/GVA/MUC/VIE ⇄ TIA corridor), combines carriers into one itinerary.
+- Provisioned via `scripts/setup_viara.py`: Railway project `viara`, services viara-api / viara-web / Mongo (mongo:7 with /data/db volume + diagnostic-data-off start cmd).
+  - API: https://viara-api-production-d279.up.railway.app  ·  Web: https://viara-web-production.up.railway.app
+- Deployed both via panel `/api/projects/{id}/refetch`. API Dockerfile strips litellm + dev tooling from requirements.
+- Live data seeded on API startup from seed_data.py: 5 airports, 6 airlines, 40 flights, 8 hotels, 7 cars, FX rates. Admin user seeded from ADMIN_EMAIL/ADMIN_PASSWORD env.
+- Verified: API /api/ health 200, /api/search returns 6 journeys ZRH→TIA, hotels/cars populated, admin login 200, web home renders (VIARA brand + live "Routes we built this morning" cards), frontend bundle references correct API URL. Both projects status=running.
+- Previous block (Railway 429 rate limit) had cleared; provisioning + both deploys succeeded on first pass.
