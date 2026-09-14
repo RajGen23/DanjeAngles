@@ -215,3 +215,14 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
 - Live data seeded on API startup from seed_data.py: 5 airports, 6 airlines, 40 flights, 8 hotels, 7 cars, FX rates. Admin user seeded from ADMIN_EMAIL/ADMIN_PASSWORD env.
 - Verified: API /api/ health 200, /api/search returns 6 journeys ZRH→TIA, hotels/cars populated, admin login 200, web home renders (VIARA brand + live "Routes we built this morning" cards), frontend bundle references correct API URL. Both projects status=running.
 - Previous block (Railway 429 rate limit) had cleared; provisioning + both deploys succeeded on first pass.
+
+### 2026-09-14 — bagbuddy-api crash after refetch (FIXED)
+- Symptom: after refetching latest build, bagbuddy-api showed "Crashed" in Railway (Mongo + web fine).
+- Root cause: new backend code calls `seed_employees()` on startup which reads `os.environ["STAFF_SEED_PIN"]`;
+  that var did not exist on the Railway service -> KeyError -> uvicorn "Application startup failed", 3 retries, CRASHED.
+  Build itself succeeded; panel marked it "live" because it only watches build status, not runtime health.
+- Fix: upserted STAFF_SEED_PIN=481902 on bagbuddy-api and redeployed. Deployment SUCCESS,
+  runtime log "BagBuddy API ready", /api/ 200, admin login 200, /admin dashboard renders with live data.
+- Open follow-up (P1): on refetch, diff workspace backend/.env keys vs Railway vars and warn/auto-add
+  missing keys BEFORE deploying; also poll runtime status after build so the panel doesn't report
+  a crashed service as "live".
