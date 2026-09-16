@@ -226,3 +226,19 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
 - Open follow-up (P1): on refetch, diff workspace backend/.env keys vs Railway vars and warn/auto-add
   missing keys BEFORE deploying; also poll runtime status after build so the panel doesn't report
   a crashed service as "live".
+
+### 2026-09-16 — Delivery 7 Tocoa deployed to Railway (React CRA + FastAPI)
+- App: multi-portal delivery platform for Tocoa, Honduras (admin panel, customer app, driver app,
+  restaurant portal), Spanish/English toggle, WebSocket realtime order sync, image uploads via
+  Emergent managed object storage (storage.py needs EMERGENT_LLM_KEY).
+- Provisioned with scripts/setup_delivery7tocoa.py: Railway project `delivery7tocoa`,
+  services delivery7tocoa-api / delivery7tocoa-web / Mongo (mongo:7 + /data/db volume).
+  - API: https://delivery7tocoa-api-production.up.railway.app
+  - Web: https://delivery7tocoa-web-production.up.railway.app
+- API env: MONGO_URL=${{Mongo.MONGO_URL}}, DB_NAME=delivery7tocoa, CORS_ORIGINS=web URL, EMERGENT_LLM_KEY.
+- Both deployed via panel /api/projects/{id}/refetch; both registered with the emergent source URL+pwd
+  so Refetch works later. Seed runs on API startup (seed_if_empty).
+- Verified: /api/ 200 ("Delivery 7 Tocoa API"), /api/restaurants 8, /api/orders and /api/drivers populated,
+  web landing renders (desktop + 390px mobile), admin login -> dashboard shows 309 pedidos / 8 restaurantes /
+  L 61,910 ingresos from live production Mongo.
+- Note: admin login is frontend-only (no backend auth) in the source app — flagged, not changed.
