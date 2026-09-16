@@ -259,3 +259,19 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
   "Oferta del día", Mejor calificados and the two new shops.
 - LESSON for the panel: seed-on-startup guards mean a code deploy does NOT migrate data. Any app
   whose seed grows needs an explicit reseed/migration step after refetch.
+
+### 2026-09-16 — Panel feature: one-click "Reseed demo data" per project
+- POST /api/projects/{pid}/reseed (server.py, ReseedInput). Calls the DEPLOYED app's own seed/reset
+  endpoint over its public api_url. Uses the project's saved `reseed_path` when present, otherwise
+  auto-probes /api/admin/reset, /api/admin/seed, /api/seed, /api/seed/reset, /api/dev/seed and saves
+  whichever one answers. Stores `reseed_path` + `last_reseed_at`; on total failure returns a 400 that
+  lists every path tried with its status so it's obvious the app has no seed endpoint.
+- UI: new "Reseed demo data" block in ProjectSettingsModal.jsx — editable path (blank = auto-detect),
+  a type-RESEED confirm gate, amber destructive styling, and a "last <timestamp>" stamp.
+  testids: reseed-path-input, reseed-confirm-input, reseed-btn.
+- Also fixed: the modal's reset effect was keyed on the whole `project` object, so the polling list
+  refresh wiped whatever the user was mid-typing (the confirm box only ever kept one character).
+  Now keyed on `project?.id`.
+- Verified: auto-detect resolved /api/admin/reset for delivery7tocoa-api (200, path persisted);
+  marine-api correctly 400s listing all 5 probes; UI gate enables only on RESEED and a real click
+  reseeded production and updated the last-run stamp. Mobile 390px renders with no overflow.

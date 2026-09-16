@@ -80,6 +80,10 @@ class ProjectUrlsInput(BaseModel):
     admin_password: Optional[str] = None
 
 
+class ReseedInput(BaseModel):
+    path: Optional[str] = None  # e.g. "/api/admin/reset"; auto-probed when omitted
+
+
 class EmergentSourceInput(BaseModel):
     url: str
     password: str
@@ -521,6 +525,46 @@ async def rollback_deployment(railway_deployment_id: str):
     if not ok:
         raise HTTPException(400, "Rollback rejected by Railway")
     return {"rolled_back_to": railway_deployment_id}
+
+
+# ---------------- Reseed demo data ----------------
+RESEED_CANDIDATES = ["/api/admin/reset", "/api/admin/seed", "/api/seed",
+                     "/api/seed/reset", "/api/dev/seed"]
+
+
+@api.post("/projects/{pid}/reseed")
+async def reseed_project(pid: str, body: ReseedInput):
+    """Call the deployed app's own seed/reset endpoint so data catches up with code.
+
+    Seed-on-startup guards (`if count > 0: return`) mean a code deploy never migrates
+    data, so newly added seed records stay missing in production until this is run.
+    """
+    project = await db.projects.find_one({"id": pid}, {"_id": 0})
+    if not project:
+        raise HTTPException(404, "Project not found")
+    base = (project.get("api_url") or project.get("url") or "").rstrip("/")
+    if not base:
+        raise HTTPException(400, "Project has no API URL — set it in Settings first")
+
+    paths = [body.path.strip()] if body.path and body.path.strip() else (
+        [project["reseed_path"]] if project.get("reseed_path") else RESEED_CANDIDATES)
+    import httpx
+    tried = []
+    async with httpx.AsyncClient(timeout=120, follow_redirects=True) as c:
+        for path in paths:
+            url = base + ("/" + path.lstrip("/"))
+            try:
+                r = await c.post(url)
+            except Exception as e:
+                tried.append(f"{path} → {e}")
+                continue
+            if r.status_code < 400:
+                await db.projects.update_one({"id": pid}, {"$set": {
+                    "reseed_path": path, "last_reseed_at": now_iso()}})
+                return {"ok": True, "path": path, "status": r.status_code,
+                        "response": r.text[:500]}
+            tried.append(f"{path} → HTTP {r.status_code}")
+    raise HTTPException(400, "No reseed endpoint responded. Tried: " + "; ".join(tried))
 
 
 @api.delete("/projects/{pid}")

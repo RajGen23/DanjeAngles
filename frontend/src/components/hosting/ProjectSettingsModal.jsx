@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
-import { ExternalLink, Github, Globe, KeyRound, RefreshCw, User, X } from "lucide-react";
+import { Database, ExternalLink, Github, Globe, KeyRound, RefreshCw, User, X } from "lucide-react";
 
 export default function ProjectSettingsModal({ api, project, ghUser, onClose, onChange }) {
   const [token, setToken] = useState("");
@@ -13,6 +13,9 @@ export default function ProjectSettingsModal({ api, project, ghUser, onClose, on
   const [emUrl, setEmUrl] = useState(project?.emergent_source_url || "");
   const [emPwd, setEmPwd] = useState("");
   const [emSubdir, setEmSubdir] = useState(project?.emergent_subdir || "");
+  const [seedPath, setSeedPath] = useState(project?.reseed_path || "");
+  const [seedConfirm, setSeedConfirm] = useState("");
+  const [seeding, setSeeding] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -22,7 +25,12 @@ export default function ProjectSettingsModal({ api, project, ghUser, onClose, on
     setAdminPassword(project?.admin_password || "");
     setEmUrl(project?.emergent_source_url || "");
     setEmSubdir(project?.emergent_subdir || "");
-  }, [project]);
+    setSeedPath(project?.reseed_path || "");
+    setSeedConfirm("");
+    // keyed on id only: the projects list polls, and re-running this on every
+    // refreshed object would wipe whatever the user is currently typing
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id]);
 
   const saveToken = useCallback(async () => {
     if (!token.trim()) return toast.error("Paste a token first");
@@ -83,6 +91,21 @@ export default function ProjectSettingsModal({ api, project, ghUser, onClose, on
       toast.error(e.response?.data?.detail || "Save failed");
     } finally { setSaving(false); }
   }, [api, project, emUrl, emPwd, emSubdir, onChange]);
+
+  const reseed = useCallback(async () => {
+    setSeeding(true);
+    try {
+      const { data } = await axios.post(`${api}/projects/${project.id}/reseed`, {
+        path: seedPath.trim() || null,
+      });
+      toast.success(`Demo data reseeded via ${data.path}`);
+      setSeedPath(data.path);
+      setSeedConfirm("");
+      onChange();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Reseed failed");
+    } finally { setSeeding(false); }
+  }, [api, project, seedPath, onChange]);
 
   if (!project) return null;
   const hasToken = !!project.railway_project_token;
@@ -203,6 +226,48 @@ export default function ProjectSettingsModal({ api, project, ghUser, onClose, on
                   className="w-full px-3 py-2 bg-neutral-900 hover:bg-neutral-700 text-white text-sm rounded-sm disabled:opacity-50 transition-colors"
                 >
                   Save Emergent source
+                </button>
+              </div>
+            </div>
+
+            {/* Reseed demo data */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Database size={13} strokeWidth={1.75} className="text-neutral-400" />
+                <span className="text-xs uppercase tracking-wider text-neutral-500">Reseed demo data</span>
+                {project.last_reseed_at && (
+                  <span className="text-[10px] font-mono text-neutral-400">
+                    last {new Date(project.last_reseed_at).toLocaleString()}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-neutral-500 leading-relaxed mb-2">
+                Apps that seed on startup skip seeding once the database has rows — so a deploy ships new
+                code but never the new seed records. This calls the app&apos;s own reset/seed endpoint so data
+                catches up with code. <span className="text-amber-700">It replaces existing records.</span>
+              </p>
+              <div className="space-y-2">
+                <input
+                  value={seedPath}
+                  onChange={(e) => setSeedPath(e.target.value)}
+                  placeholder="/api/admin/reset (blank = auto-detect)"
+                  data-testid="reseed-path-input"
+                  className="w-full border border-neutral-200 rounded-sm px-3 py-2 text-sm font-mono focus:outline-none focus-visible:ring-1 focus-visible:ring-[#FF4400] bg-white"
+                />
+                <input
+                  value={seedConfirm}
+                  onChange={(e) => setSeedConfirm(e.target.value)}
+                  placeholder="type RESEED to confirm"
+                  data-testid="reseed-confirm-input"
+                  className="w-full border border-neutral-200 rounded-sm px-3 py-2 text-sm font-mono focus:outline-none focus-visible:ring-1 focus-visible:ring-[#FF4400] bg-white"
+                />
+                <button
+                  onClick={reseed}
+                  disabled={seeding || seedConfirm.trim().toUpperCase() !== "RESEED"}
+                  data-testid="reseed-btn"
+                  className="w-full px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm rounded-sm disabled:opacity-40 transition-colors"
+                >
+                  {seeding ? "Reseeding…" : "Reseed demo data"}
                 </button>
               </div>
             </div>
