@@ -242,3 +242,20 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
   web landing renders (desktop + 390px mobile), admin login -> dashboard shows 309 pedidos / 8 restaurantes /
   L 61,910 ingresos from live production Mongo.
 - Note: admin login is frontend-only (no backend auth) in the source app — flagged, not changed.
+
+### 2026-09-16 (later) — Delivery 7 Tocoa: missing sections in production (FIXED)
+- Symptom: "Flores y Regalos", "Mejor calificados", "Platillos populares" visible in the Emergent
+  preview but empty on the published app, even right after a Refetch.
+- Root cause: NOT a deploy gap. The fetcher pulled all 7 backend + 72 frontend files and both
+  services redeployed fine (landing text already showed the newer "Mandaditos 7"). The app's
+  `seed_if_empty()` returns early whenever `restaurants` is non-empty, so production Mongo kept the
+  day-one seed (8 restaurants) and never received the newer seed entries r9 Floristería Bella Rosa,
+  r10 Detalles y Regalos Tocoa, their flower/gift menus and the gift catalogue.
+- Fix: redeployed api + web from the current workspace, then called POST /api/admin/reset on
+  production (force reseed, user approved the data wipe).
+- Verified: /api/restaurants now returns 10 incl. r9/r10 with type=regalos, /api/menus/r9 returns
+  Ramos / Arreglos florales / Cajas de rosas, 300 demo orders regenerated, and the customer home at
+  /app/home (after demo login) renders the Flores y Regalos category chip, the Caja de Rosas Premium
+  "Oferta del día", Mejor calificados and the two new shops.
+- LESSON for the panel: seed-on-startup guards mean a code deploy does NOT migrate data. Any app
+  whose seed grows needs an explicit reseed/migration step after refetch.
