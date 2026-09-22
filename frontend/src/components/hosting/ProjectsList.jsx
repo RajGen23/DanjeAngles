@@ -2,7 +2,7 @@ import { useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
-import { Database, ExternalLink, Github, History, KeyRound, RefreshCw, RotateCw, Settings, Trash2, Zap } from "lucide-react";
+import { Database, ExternalLink, Github, History, KeyRound, RefreshCw, RotateCw, Settings, Sprout, Trash2, Zap } from "lucide-react";
 
 const STATUS_STYLES = {
   running: "bg-emerald-100 text-emerald-800",
@@ -81,6 +81,20 @@ export default function ProjectsList({ projects, api, onChange, onOpenEnv, onOpe
       onChange();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Failed to remove MongoDB");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const reseed = async (p) => {
+    if (!window.confirm(`Reseed demo data for '${p.name}'?\n\nThis calls the app's own seed/reset endpoint and REPLACES existing records with the current seed set. Use it when new seed content is in the code but missing in production.`)) return;
+    setBusy(p.id + "reseed");
+    try {
+      const { data } = await axios.post(`${api}/projects/${p.id}/reseed`, {});
+      toast.success(`${p.name}: demo data reseeded via ${data.path}`);
+      onChange();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Reseed failed");
     } finally {
       setBusy(null);
     }
@@ -212,6 +226,15 @@ export default function ProjectsList({ projects, api, onChange, onOpenEnv, onOpe
                     <RefreshCw size={14} strokeWidth={1.5} className={busy === p.id + "refetch" ? "animate-spin" : ""} />
                   </IconBtn>
                 )}
+                <IconBtn
+                  title="Reseed demo data (calls the app's seed/reset endpoint)"
+                  onClick={() => reseed(p)}
+                  disabled={busy === p.id + "reseed" || !canOps}
+                  testId={`reseed-row-btn-${p.name}`}
+                  active={!!p.reseed_path}
+                >
+                  <Sprout size={14} strokeWidth={1.5} className={busy === p.id + "reseed" ? "animate-pulse" : ""} />
+                </IconBtn>
                 <IconBtn title="Delete project" onClick={() => remove(p)} disabled={busy} testId={`delete-btn-${p.name}`}>
                   <Trash2 size={14} strokeWidth={1.5} />
                 </IconBtn>

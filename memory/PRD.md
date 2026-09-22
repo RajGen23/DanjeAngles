@@ -275,3 +275,37 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
 - Verified: auto-detect resolved /api/admin/reset for delivery7tocoa-api (200, path persisted);
   marine-api correctly 400s listing all 5 probes; UI gate enables only on RESEED and a real click
   reseeded production and updated the last-run stamp. Mobile 390px renders with no overflow.
+
+### 2026-09-18 — Reseed button promoted to the project row
+- ProjectsList.jsx: new sprout IconBtn per project row (testid `reseed-row-btn-<name>`), window.confirm
+  warning that records are replaced, calls the same POST /api/projects/{pid}/reseed. Highlights green
+  when the project already has a saved `reseed_path`. The full control (custom path + type-RESEED gate)
+  stays in Project Settings.
+- Verified: 10 row buttons render, desktop + 390px mobile clean, no horizontal overflow.
+
+### PENDING — BrandJunction deploy (blocked on user answers)
+- Workspace: https://vscode-668db3a3-fcae-466d-a95a-6f9f80558002.preview.emergentagent.com (pwd 169cc14c)
+- Astro 5 static site, ~400 prerendered pages, 31 regions (src/pages/[...path].astro + projects/,
+  trending/, blog/, admin/, sitemap-*.xml.ts). Backend FastAPI + Mongo with routes/public.py,
+  routes/admin.py, scheduler.py (SEO autopilot), Playwright crawler, Higgsfield image API, JWT admin.
+- Build-time coupling: Astro fetches CMS_INTERNAL_URL/api/cms/export during `astro build`, so the API
+  must be live + seeded BEFORE the web build, and CMS edits need a web rebuild to show.
+- Panel work required first: emergent_fetcher needs .astro/.ts/.mjs import resolution + Astro seed
+  paths; railway_client needs an astro framework + Dockerfile (yarn build → serve dist).
+- Open questions asked: custom domain now vs later, staging vs replacement, keep Playwright in the
+  API image (~700MB), copy workspace CMS content vs start empty.
+
+### 2026-09-22 — bagbuddy-api crashed again on refetch (FIXED) — env drift, 2nd recurrence
+- Symptom: refetch built fine, then Railway showed Crashed.
+- Root cause: identical class to 2026-09-14. auth.py now also requires STAFF_SEED_PASSWORD, and the
+  workspace .env had grown many new keys that production never received. KeyError at startup ->
+  "Application startup failed" -> 3 retries -> CRASHED.
+- Fix: synced 11 keys from the workspace .env onto bagbuddy-api and redeployed:
+  STAFF_SEED_PASSWORD, BUNNY_STORAGE_ZONE/PASSWORD/ENDPOINT, BUNNY_PULLZONE_HOSTNAME,
+  EMERGENT_LLM_KEY, OPENAI_API_KEY, AVIATIONSTACK_ACCESS_KEY, TAG_OCR_PROVIDER, TAG_OCR_MODEL,
+  FLIGHT_CACHE_SECONDS. (MONGO_URL/DB_NAME/CORS_ORIGINS stay production-specific.)
+- Verified: deployment SUCCESS, runtime "GoZevani API ready", /api/ + /api/settings + /api/airports 200,
+  admin login 200, web home and /admin dashboard render (10 bookings, $620.55 revenue).
+- NOTE: the app has been rebranded BagBuddy -> GoZevani in the workspace; booking refs now GZV-HOU-*.
+- Env Drift Guard is now a P0 for the panel: on refetch, diff the workspace backend/.env keys against
+  the Railway service vars and auto-add/warn BEFORE deploying. This exact failure has now happened twice.
