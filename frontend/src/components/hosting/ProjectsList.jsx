@@ -87,14 +87,14 @@ export default function ProjectsList({ projects, api, onChange, onOpenEnv, onOpe
   };
 
   const reseed = async (p) => {
-    if (!window.confirm(`Reseed demo data for '${p.name}'?\n\nThis calls the app's own seed/reset endpoint and REPLACES existing records with the current seed set. Use it when new seed content is in the code but missing in production.`)) return;
+    if (!window.confirm(`Add missing seed records to '${p.name}'?\n\nInserts only seed data the database does not have yet. Orders, customers and accounts are left untouched. Nothing is deleted.`)) return;
     setBusy(p.id + "reseed");
     try {
-      const { data } = await axios.post(`${api}/projects/${p.id}/reseed`, {});
-      toast.success(`${p.name}: demo data reseeded via ${data.path}`);
+      const { data } = await axios.post(`${api}/projects/${p.id}/reseed`, { mode: "additive" });
+      toast.success(`${p.name}: missing seed records added via ${data.path}`);
       onChange();
     } catch (e) {
-      toast.error(e.response?.data?.detail || "Reseed failed");
+      toast.error(e.response?.data?.detail || "Reseed failed", { duration: 12000 });
     } finally {
       setBusy(null);
     }
@@ -227,7 +227,7 @@ export default function ProjectsList({ projects, api, onChange, onOpenEnv, onOpe
                   </IconBtn>
                 )}
                 <IconBtn
-                  title="Reseed demo data (calls the app's seed/reset endpoint)"
+                  title="Add missing seed records (safe — nothing is deleted)"
                   onClick={() => reseed(p)}
                   disabled={busy === p.id + "reseed" || !canOps}
                   testId={`reseed-row-btn-${p.name}`}

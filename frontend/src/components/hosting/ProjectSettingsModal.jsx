@@ -92,18 +92,20 @@ export default function ProjectSettingsModal({ api, project, ghUser, onClose, on
     } finally { setSaving(false); }
   }, [api, project, emUrl, emPwd, emSubdir, onChange]);
 
-  const reseed = useCallback(async () => {
+  const reseed = useCallback(async (mode) => {
     setSeeding(true);
     try {
       const { data } = await axios.post(`${api}/projects/${project.id}/reseed`, {
-        path: seedPath.trim() || null,
+        path: seedPath.trim() || null, mode,
       });
-      toast.success(`Demo data reseeded via ${data.path}`);
-      setSeedPath(data.path);
+      toast.success(mode === "reset"
+        ? `Wiped and reseeded via ${data.path}`
+        : `Missing seed records added via ${data.path}`);
+      setSeedPath(mode === "reset" ? "" : data.path);
       setSeedConfirm("");
       onChange();
     } catch (e) {
-      toast.error(e.response?.data?.detail || "Reseed failed");
+      toast.error(e.response?.data?.detail || "Reseed failed", { duration: 12000 });
     } finally { setSeeding(false); }
   }, [api, project, seedPath, onChange]);
 
@@ -234,7 +236,7 @@ export default function ProjectSettingsModal({ api, project, ghUser, onClose, on
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <Database size={13} strokeWidth={1.75} className="text-neutral-400" />
-                <span className="text-xs uppercase tracking-wider text-neutral-500">Reseed demo data</span>
+                <span className="text-xs uppercase tracking-wider text-neutral-500">Seed data</span>
                 {project.last_reseed_at && (
                   <span className="text-[10px] font-mono text-neutral-400">
                     last {new Date(project.last_reseed_at).toLocaleString()}
@@ -243,32 +245,48 @@ export default function ProjectSettingsModal({ api, project, ghUser, onClose, on
               </div>
               <p className="text-[11px] text-neutral-500 leading-relaxed mb-2">
                 Apps that seed on startup skip seeding once the database has rows — so a deploy ships new
-                code but never the new seed records. This calls the app&apos;s own reset/seed endpoint so data
-                catches up with code. <span className="text-amber-700">It replaces existing records.</span>
+                code but never the new seed records.
               </p>
               <div className="space-y-2">
                 <input
                   value={seedPath}
                   onChange={(e) => setSeedPath(e.target.value)}
-                  placeholder="/api/admin/reset (blank = auto-detect)"
+                  placeholder="/api/admin/seed-missing (blank = auto-detect)"
                   data-testid="reseed-path-input"
                   className="w-full border border-neutral-200 rounded-sm px-3 py-2 text-sm font-mono focus:outline-none focus-visible:ring-1 focus-visible:ring-[#FF4400] bg-white"
                 />
-                <input
-                  value={seedConfirm}
-                  onChange={(e) => setSeedConfirm(e.target.value)}
-                  placeholder="type RESEED to confirm"
-                  data-testid="reseed-confirm-input"
-                  className="w-full border border-neutral-200 rounded-sm px-3 py-2 text-sm font-mono focus:outline-none focus-visible:ring-1 focus-visible:ring-[#FF4400] bg-white"
-                />
                 <button
-                  onClick={reseed}
-                  disabled={seeding || seedConfirm.trim().toUpperCase() !== "RESEED"}
-                  data-testid="reseed-btn"
-                  className="w-full px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm rounded-sm disabled:opacity-40 transition-colors"
+                  onClick={() => reseed("additive")}
+                  disabled={seeding}
+                  data-testid="reseed-additive-btn"
+                  className="w-full px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-sm rounded-sm disabled:opacity-40 transition-colors"
                 >
-                  {seeding ? "Reseeding…" : "Reseed demo data"}
+                  {seeding ? "Working…" : "Add missing seed records (safe)"}
                 </button>
+                <p className="text-[11px] text-neutral-500 leading-relaxed">
+                  Inserts only what the database is missing. Orders, customers and accounts are left alone.
+                </p>
+                <div className="pt-2 border-t border-neutral-100">
+                  <p className="text-[11px] text-amber-700 leading-relaxed mb-2">
+                    Full reset wipes the seeded collections and re-inserts the demo set — it
+                    <span className="font-semibold"> deletes real user data</span>. Demo apps only.
+                  </p>
+                  <input
+                    value={seedConfirm}
+                    onChange={(e) => setSeedConfirm(e.target.value)}
+                    placeholder={`type ${project.name} to enable full reset`}
+                    data-testid="reseed-confirm-input"
+                    className="w-full border border-neutral-200 rounded-sm px-3 py-2 text-sm font-mono focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-600 bg-white mb-2"
+                  />
+                  <button
+                    onClick={() => reseed("reset")}
+                    disabled={seeding || seedConfirm.trim() !== project.name}
+                    data-testid="reseed-reset-btn"
+                    className="w-full px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm rounded-sm disabled:opacity-40 transition-colors"
+                  >
+                    Wipe and reseed everything
+                  </button>
+                </div>
               </div>
             </div>
 

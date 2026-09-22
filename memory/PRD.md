@@ -335,3 +335,25 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
   every status poller sleep ~5 min at once, which made the panel itself return 502. The wait is now
   capped at 30s with 3 attempts (railway_client._post). Panel responsive again after restart.
 - Final state: bagbuddy-web deployment b06123e7 SUCCESS, both bagbuddy projects `running`.
+
+### 2026-09-22 — Reseed made additive-first (non-destructive by default)
+- Answer to the user's question: yes, the old button was destructive. /api/admin/reset clears the
+  seeded collections and re-inserts demo data, so real orders/customers would be deleted.
+- POST /api/projects/{pid}/reseed now takes `mode`:
+  - "additive" (DEFAULT): probes /api/admin/seed-missing, /api/admin/seed_missing,
+    /api/admin/seed-new, /api/seed/missing. Nothing is deleted. If no such endpoint exists it
+    returns 409 WITHOUT calling anything, and the error body carries a ready-to-paste
+    `@router.post("/admin/seed-missing")` snippet (SEED_MISSING_SNIPPET in server.py).
+    Critically it does NOT fall back to the destructive reset.
+  - "reset": the old wipe-and-reseed behaviour, kept for demo apps.
+- Paths are stored separately: `reseed_path` (additive) vs `reseed_reset_path` (destructive).
+  Migrated the 2 delivery7tocoa projects whose saved /api/admin/reset moved into reseed_reset_path.
+- UI (ProjectSettingsModal): green "Add missing seed records (safe)" button = one click;
+  "Wipe and reseed everything" is amber and now requires typing the PROJECT NAME (not "RESEED").
+  testids: reseed-additive-btn, reseed-reset-btn, reseed-path-input, reseed-confirm-input.
+  The project-row sprout button is additive-only.
+- Verified: additive on delivery7tocoa-api returns 409 with the snippet and left all 300 orders
+  intact; reset mode still works via the saved path; UI gate stays disabled until the exact project
+  name is typed; 390px clean, no overflow.
+- TODO per app: add the /api/admin/seed-missing endpoint in each workspace (delivery7tocoa first),
+  then the safe button works everywhere.

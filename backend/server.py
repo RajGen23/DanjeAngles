@@ -81,7 +81,8 @@ class ProjectUrlsInput(BaseModel):
 
 
 class ReseedInput(BaseModel):
-    path: Optional[str] = None  # e.g. "/api/admin/reset"; auto-probed when omitted
+    path: Optional[str] = None  # e.g. "/api/admin/seed-missing"; auto-probed when omitted
+    mode: str = "additive"      # "additive" = insert only missing; "reset" = wipe + reseed
 
 
 class EmergentSourceInput(BaseModel):
@@ -528,16 +529,38 @@ async def rollback_deployment(railway_deployment_id: str):
 
 
 # ---------------- Reseed demo data ----------------
-RESEED_CANDIDATES = ["/api/admin/reset", "/api/admin/seed", "/api/seed",
-                     "/api/seed/reset", "/api/dev/seed"]
+# Additive: inserts only seed records the database is missing. Never touches
+# orders, customers or accounts, so it is safe on an app with real users.
+ADDITIVE_CANDIDATES = ["/api/admin/seed-missing", "/api/admin/seed_missing",
+                       "/api/admin/seed-new", "/api/seed/missing"]
+# Destructive: the app's own wipe-and-reseed endpoint.
+RESET_CANDIDATES = ["/api/admin/reset", "/api/admin/seed", "/api/seed",
+                    "/api/seed/reset", "/api/dev/seed"]
+
+SEED_MISSING_SNIPPET = """Add this to the app's backend (FastAPI), then refetch:
+
+@router.post("/admin/seed-missing")
+async def seed_missing():
+    \"\"\"Insert only seed records this database does not have yet.
+    Never deletes: safe to run on production with real users.\"\"\"
+    added = {}
+    for coll, docs, key in SEED_SETS:           # e.g. ("restaurants", RESTAURANTS, "id")
+        existing = set(await db[coll].distinct(key))
+        new = [d for d in docs if d[key] not in existing]
+        if new:
+            await db[coll].insert_many([dict(d) for d in new])
+        added[coll] = len(new)
+    return {"ok": True, "added": added}
+"""
 
 
 @api.post("/projects/{pid}/reseed")
 async def reseed_project(pid: str, body: ReseedInput):
-    """Call the deployed app's own seed/reset endpoint so data catches up with code.
+    """Bring seed data in line with the code.
 
     Seed-on-startup guards (`if count > 0: return`) mean a code deploy never migrates
     data, so newly added seed records stay missing in production until this is run.
+    Defaults to additive so existing user data is never destroyed.
     """
     project = await db.projects.find_one({"id": pid}, {"_id": 0})
     if not project:
@@ -546,8 +569,15 @@ async def reseed_project(pid: str, body: ReseedInput):
     if not base:
         raise HTTPException(400, "Project has no API URL — set it in Settings first")
 
-    paths = [body.path.strip()] if body.path and body.path.strip() else (
-        [project["reseed_path"]] if project.get("reseed_path") else RESEED_CANDIDATES)
+    additive = body.mode != "reset"
+    saved = project.get("reseed_path" if additive else "reseed_reset_path")
+    if body.path and body.path.strip():
+        paths = [body.path.strip()]
+    elif saved:
+        paths = [saved]
+    else:
+        paths = ADDITIVE_CANDIDATES if additive else RESET_CANDIDATES
+
     import httpx
     tried = []
     async with httpx.AsyncClient(timeout=120, follow_redirects=True) as c:
@@ -559,11 +589,17 @@ async def reseed_project(pid: str, body: ReseedInput):
                 tried.append(f"{path} → {e}")
                 continue
             if r.status_code < 400:
+                field = "reseed_path" if additive else "reseed_reset_path"
                 await db.projects.update_one({"id": pid}, {"$set": {
-                    "reseed_path": path, "last_reseed_at": now_iso()}})
-                return {"ok": True, "path": path, "status": r.status_code,
-                        "response": r.text[:500]}
+                    field: path, "last_reseed_at": now_iso()}})
+                return {"ok": True, "mode": "additive" if additive else "reset",
+                        "path": path, "status": r.status_code, "response": r.text[:500]}
             tried.append(f"{path} → HTTP {r.status_code}")
+
+    if additive:
+        raise HTTPException(409, "This app has no additive seed endpoint yet, so nothing was "
+                                 "changed and no data was touched. Tried: " + "; ".join(tried)
+                                 + "\n\n" + SEED_MISSING_SNIPPET)
     raise HTTPException(400, "No reseed endpoint responded. Tried: " + "; ".join(tried))
 
 
