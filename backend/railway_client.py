@@ -43,13 +43,25 @@ PROJECT_TOKEN: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
 
 
 async def _post(headers: dict, query: str, variables: Optional[dict]) -> dict:
-    async with httpx.AsyncClient(timeout=60) as c:
-        r = await c.post(RAILWAY_URL,
-                         headers={**headers, "Content-Type": "application/json"},
-                         json={"query": query, "variables": variables or {}})
-    if r.status_code >= 400:
-        raise RailwayError(f"HTTP {r.status_code}: {r.text[:400]}")
-    return r.json()
+    """Railway rate-limits hard during multi-resource work, so retry 429s with
+    exponential backoff instead of failing the whole deploy."""
+    delay = 5.0
+    for attempt in range(3):
+        async with httpx.AsyncClient(timeout=60) as c:
+            r = await c.post(RAILWAY_URL,
+                             headers={**headers, "Content-Type": "application/json"},
+                             json={"query": query, "variables": variables or {}})
+        if r.status_code == 429 and attempt < 2:
+            # Railway's Retry-After can be 5+ minutes; cap it so pollers stay responsive
+            wait = min(float(r.headers.get("retry-after") or delay), 30.0)
+            log.warning("Railway 429 — retrying in %.0fs (attempt %d/3)", wait, attempt + 1)
+            await asyncio.sleep(wait)
+            delay = min(delay * 3, 30.0)
+            continue
+        if r.status_code >= 400:
+            raise RailwayError(f"HTTP {r.status_code}: {r.text[:400]}")
+        return r.json()
+    raise RailwayError("Railway rate limit (429) persisted after 3 attempts")
 
 
 async def gql(query: str, variables: Optional[dict[str, Any]] = None) -> dict[str, Any]:

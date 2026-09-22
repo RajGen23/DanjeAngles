@@ -163,6 +163,29 @@ async def discover_expo_sources(app_url: str, workspace_root: str = "/app") -> l
                    if s.startswith(root) and "node_modules" not in s})
 
 
+ASSET_EXT = r"png|jpg|jpeg|svg|webp|ico|avif|gif|mp4|webm|woff2?|ttf|pdf"
+# "/brand/gz-van-apron.webp", src="/img/hero.png", url(/fonts/x.woff2) — any depth
+ASSET_ABS = re.compile(r'["\'`(]/((?:[A-Za-z0-9_\-.]+/)*[A-Za-z0-9_\-.]+\.(?:' + ASSET_EXT + r'))["\'`)?#]')
+# `${CDN}/gz-van-apron.webp` — tail only; joined with the file's own base constants
+ASSET_TAIL = re.compile(r'\$\{[A-Za-z0-9_.\[\]\'"]+\}/((?:[A-Za-z0-9_\-.]+/)*[A-Za-z0-9_\-.]+\.(?:' + ASSET_EXT + r'))')
+ASSET_BASE = re.compile(r'=\s*["\'`]/([A-Za-z0-9_\-./]*[A-Za-z0-9_\-])["\'`]')
+
+
+def _public_asset_refs(text: str, workspace_root: str) -> list[str]:
+    """Assets under frontend/public that no import statement points at.
+
+    Static references live in markup and string constants, so the import BFS never
+    reaches them: they have to be recovered from the source text itself.
+    """
+    public = f"{workspace_root.rstrip('/')}/frontend/public"
+    rels = {m.group(1) for m in ASSET_ABS.finditer(text)}
+    tails = {m.group(1) for m in ASSET_TAIL.finditer(text)}
+    if tails:
+        bases = {m.group(1) for m in ASSET_BASE.finditer(text)}
+        rels |= {f"{b}/{t}" for b in bases for t in tails} | tails
+    return [f"{public}/{r}" for r in rels if ".." not in r]
+
+
 def _seed_paths(workspace_root: str, subdir: Optional[str] = None) -> list[str]:
     """Build seed list based on which subdir of the workspace we're fetching."""
     root = workspace_root.rstrip("/")
@@ -300,9 +323,8 @@ async def fetch_workspace(url: str, password: str, workspace_root: str = "/app",
                     text = body.decode("utf-8", errors="ignore")
                 except Exception:
                     continue
-                if lower.endswith((".js", ".jsx", ".ts", ".tsx", ".html")):
-                    for m in re.finditer(r'(?:src|href)="/([A-Za-z0-9_-]+\.(?:png|jpg|jpeg|svg|webp|ico))"', text):
-                        cand = f"{workspace_root.rstrip('/')}/frontend/public/{m.group(1)}"
+                if lower.endswith((".js", ".jsx", ".ts", ".tsx", ".html", ".css")):
+                    for cand in _public_asset_refs(text, workspace_root):
                         if cand not in visited:
                             queue.append(cand)
                 if lower.endswith((".js", ".jsx", ".ts", ".tsx")):

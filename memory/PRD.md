@@ -309,3 +309,29 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
 - NOTE: the app has been rebranded BagBuddy -> GoZevani in the workspace; booking refs now GZV-HOU-*.
 - Env Drift Guard is now a P0 for the panel: on refetch, diff the workspace backend/.env keys against
   the Railway service vars and auto-add/warn BEFORE deploying. This exact failure has now happened twice.
+
+### 2026-09-22 — GoZevani images broken in production (FIXED) + panel fetcher gap closed
+- Symptom: 9 of 11 images broken on the published site.
+- First (wrong) read: the live bundle still pointed at https://storageextractor.b-cdn.net/brand/*.webp,
+  which now 403s (pull zone dead) and whose storage key 401s. That was a STALE BUNDLE.
+- Actual root cause: the workspace source had already moved to local assets
+  (src/data/content.js: `const CDN = "/brand"` -> /brand/*.webp in frontend/public/brand/), but
+  emergent_fetcher never fetched them. Its public-asset regex only matched
+  `(src|href)="/<single-file>.<ext>"` — no subdirectories, and nothing inside JS string constants or
+  template literals — so frontend/public/brand/*.webp was silently dropped from every deploy.
+- Fetcher fix: new `_public_asset_refs()` in emergent_fetcher.py with three patterns —
+  ASSET_ABS (quoted absolute path, any depth, in js/jsx/ts/tsx/html/css), ASSET_TAIL (`${VAR}/x.webp`
+  template-literal tails) joined against ASSET_BASE (`= "/brand"` style base constants), covering
+  png/jpg/jpeg/svg/webp/ico/avif/gif/mp4/webm/woff(2)/ttf/pdf. Fetch went 97 -> 105 files and now
+  includes all 6 gz-*.webp brand images.
+- railway_client._post: added 429 exponential backoff (5 attempts, honours Retry-After, 5s->60s).
+  This closes the long-standing recurring rate-limit issue; it tripped again mid-fix and the retry
+  handled the redeploy.
+- Verified: /brand/*.webp all 200 on production, home page 11/11 images load, /services 7/7,
+  desktop 1920 + mobile 390 both clean.
+- Note: I generated 5 replacement brand images before finding the real cause — not used, the
+  workspace originals are the ones deployed.
+- Follow-up on the 429 backoff: Railway's Retry-After is often 300s+, and honouring it verbatim made
+  every status poller sleep ~5 min at once, which made the panel itself return 502. The wait is now
+  capped at 30s with 3 attempts (railway_client._post). Panel responsive again after restart.
+- Final state: bagbuddy-web deployment b06123e7 SUCCESS, both bagbuddy projects `running`.
