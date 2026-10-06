@@ -1,0 +1,40 @@
+{
+  "summary": "Configuration verification for delivery7tocoa custom domain www.delibery7.com. 8/10 pytest pass. CONFIRMED: (a) www.delibery7.com row in /api/domains is attached ONLY to project delivery7tocoa-web (railway_domain_id ea448f08-a869-4d6f-9fc7-840a3918be42, panel id d10f6058-3f54-432a-b11c-f7463e3b5487), single-row, no duplicates; (b) required CNAME target reported by Railway is gzfs97lb.up.railway.app but currentValue is 'delibery7.com' -> DNS_RECORD_STATUS_REQUIRES_UPDATE, i.e. DNS not yet propagated (pending user action, as expected); (c) old Railway domains preserved and serving 200: https://delivery7tocoa-web-production.up.railway.app/ and https://delivery7tocoa-api-production.up.railway.app/api/ (16 restaurants at /api/restaurants); (d) CORS_ORIGINS on delivery7tocoa-api service now reads 'https://delivery7tocoa-web-production.up.railway.app,https://www.delibery7.com' (source=railway) -- merge is present; (e) targetPort=3000 matches running web port -- WEB_DOCKER runs `serve -s build -l ${PORT:-3000}` and Railway auto-injects PORT; the old public URL returns 200 and RAILWAY_PUBLIC_DOMAIN/RAILWAY_STATIC_URL/RAILWAY_SERVICE_DELIVERY7TOCOA_WEB_URL all now equal 'www.delibery7.com', confirming Railway's routing side of the custom domain is wired to the same service that's already serving on 3000. FAILING: preflight OPTIONS and simple-GET with Origin=https://www.delibery7.com against the API do NOT return Access-Control-Allow-Origin -- OPTIONS returns 400 and GET returns 200 without ACAO -- even ~5 minutes after rw.redeploy_service returned true. Old origin preflight still works (200 + ACAO). This means the currently-running API deployment has NOT yet picked up the merged CORS_ORIGINS. The env var IS updated on Railway; either the redeploy is still building or Railway did not restart the container. Direct HTTPS to https://www.delibery7.com currently hits the dns-parking IP (parked page) and Railway's edge returns 404 'Application not found' when Host=www.delibery7.com is forced -- consistent with the pending DNS state. No code, no seed data, no writes touched.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "delivery7tocoa-api /api/*", "issue": "Even after redeploy call, the live deployment still rejects Origin=https://www.delibery7.com in both preflight (OPTIONS 400, no ACAO) and simple GET (200 without ACAO). CORS_ORIGINS env is correct on Railway (contains both origins). Needs another explicit redeploy of delivery7tocoa-api and a poll of latest deployment status until SUCCESS before declaring the custom-domain frontend usable."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Browser-from-www.delibery7.com -> API", "issue": "Once DNS is updated by the user, the frontend served on https://www.delibery7.com will still be blocked by CORS on the API until the API container actually restarts with the new CORS_ORIGINS. Retrigger redeploy + verify.", "affected_selectors": []}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_delivery7_custom_domain.py",
+    "/app/test_reports/pytest/iteration_10.xml"
+  ],
+  "action_items": [
+    "Retrigger a redeploy of delivery7tocoa-api and poll the latest deployment (rw.list_service_deployments / rw.get_deployment) until status=SUCCESS, then re-run test_cors_new_origin_preflight_should_be_ok and test_cors_new_origin_simple_get_has_acao to confirm CORS_ORIGINS is live.",
+    "Leave DNS to user as agreed: www CNAME must be changed from delibery7.com to gzfs97lb.up.railway.app. Once done, revisit dns_status on GET /api/domains -- should flip from 'propagating' -> 'active' with ssl:true.",
+    "No source code change needed; no data reset performed."
+  ],
+  "critical_code_review_comments": [
+    "GET /api/domains merges live Railway status per row but does an N+1 GraphQL round-trip inside the listing loop -- fine at current scale (2 domains) but will become slow. Consider batching or caching status for a short TTL.",
+    "create_custom_domain defaults target_port to 3000. Good for CRA/Vite web services but may bite non-3000 services. A pre-flight step that reads the service's actual listening port before defaulting would be safer.",
+    "server.py:791 add_domain does NOT validate that the caller's project_id points at a *web/frontend* service, so nothing structurally prevents attaching a custom domain to an API service by mistake. Confirmed here that www.delibery7.com is on -web only, but the guard is by convention, not code."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_delivery7_custom_domain.py (new — 10 tests, 8 pass, 2 blocked on API redeploy propagation)"
+  ],
+  "success_rate": {"backend": "80% (8/10 pytest — 2 CORS tests fail pending API redeploy)", "frontend": "not tested (task is configuration-only, no UI changes)"},
+  "test_credentials": "not used — read-only configuration verification.",
+  "seed_data_creation": "none — read-only, no writes to production data.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Regression harness at /app/backend/tests/test_delivery7_custom_domain.py. When main agent retriggers the API redeploy, rerun `pytest backend/tests/test_delivery7_custom_domain.py -v` -- the two failing tests (test_cors_new_origin_preflight_should_be_ok, test_cors_new_origin_simple_get_has_acao) will pass once the container restarts with the new CORS_ORIGINS. DNS side (test_custom_domain_https_not_yet_railway_hosted) is tolerant: it passes whether the DNS is still parked or already switched.",
+  "rca of the issue": "Root cause of the two failing CORS assertions: FastAPI's CORSMiddleware in the delivery7tocoa-api service reads allow_origins from os.environ.get('CORS_ORIGINS','*').split(',') at process startup. The Railway env variable was updated to include https://www.delibery7.com AND rw.redeploy_service was called, but as of the last check the running container was still on the old process (no ACAO for the new origin, preflight 400). Either the redeploy is still building or the redeploy op returned true without actually restarting the service. Mitigation: (1) call rw.redeploy_service again for delivery7tocoa-api, (2) rw.list_service_deployments to fetch the latest deployment id, (3) poll rw.get_deployment until status==SUCCESS, (4) re-run the test file. No code change is needed. The old-origin CORS keeps working, so nothing is broken for existing users."
+}

@@ -357,3 +357,20 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
   name is typed; 390px clean, no overflow.
 - TODO per app: add the /api/admin/seed-missing endpoint in each workspace (delivery7tocoa first),
   then the safe button works everywhere.
+
+### 2026-10-06 — Provisioned Best For Medals (best4medals.com)
+- New Railway project `best4medals` (id 214d7f8d-82ae-4f7a-b345-0603809365a1) with 3 services:
+  best4medals-api (FastAPI/uvicorn Dockerfile), best4medals-web (CRA+craco -> serve), Mongo 7
+  (auth, /data/db volume). Provisioning script: backend/scripts/setup_best4medals.py.
+- Source fetched from the Emergent workspace via the panel's refetch pipeline (both services live).
+- Persistent volume mounted at /app/uploads on the API so admin-uploaded product/design images
+  survive redeploys (server.py mounts StaticFiles at /api/uploads).
+- Env wired: MONGO_URL=${{Mongo.MONGO_URL}}, DB_NAME=best4medals, CORS_ORIGINS=web url + apex/www
+  best4medals.com, ADMIN_USERNAME/ADMIN_PASSWORD, JWT_SECRET. Web: REACT_APP_BACKEND_URL=api url.
+- GitHub sync OFF for this project (per user). Emergent source saved so Refetch works.
+- Custom domain www.best4medals.com attached to best4medals-web; awaiting user DNS CNAME
+  -> 7c3m8brg.up.railway.app.
+- Verified: /api/ ok, /api/products returns seeded catalogue, admin login returns JWT,
+  web 200 at 1920 + 390.
+- Delivery7Tocoa follow-up: delivery7tocoa-api /api/ returns 200 with new CORS; www.delibery7.com
+  returns 308 (redirect to apex at registrar) — user should point www CNAME at Railway, not apex.
