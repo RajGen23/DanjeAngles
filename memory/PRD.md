@@ -374,3 +374,12 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
   web 200 at 1920 + 390.
 - Delivery7Tocoa follow-up: delivery7tocoa-api /api/ returns 200 with new CORS; www.delibery7.com
   returns 308 (redirect to apex at registrar) — user should point www CNAME at Railway, not apex.
+
+### 2026-10-06 (later) — best4medals custom domains
+- www.best4medals.com: DNS propagated, SSL active, serving 200.
+- Found the web service was 502-ing on the custom domain: `serve` picked up Railway's injected
+  PORT (8080) while the custom domain targetPort was 3000. Pinned PORT=3000 on best4medals-web
+  and redeployed -> fixed. Also recreated the generated service domain which had gone missing
+  (best4medals-web-production.up.railway.app, 200 again).
+- Apex best4medals.com re-added as a custom domain (Railway id 20abed92..., targetPort 3000).
+  Required record: CNAME @ -> wumnd117.up.railway.app (panel domains doc updated to match).
