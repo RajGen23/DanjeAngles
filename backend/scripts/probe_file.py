@@ -3,8 +3,8 @@ import httpx
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from emergent_fetcher import _login, UA  # noqa
 
-URL = "https://vscode-610bdf3c-b8f4-4a3c-9d48-258dbae13ac1.preview.emergentagent.com"
-PWD = "ad99ee38"
+URL = "https://vscode-99fb6e7f-0472-418f-bef7-4eefe91aac0f.preview.emergentagent.com"
+PWD = "1d78b278"
 PATHS = sys.argv[1:]
 
 

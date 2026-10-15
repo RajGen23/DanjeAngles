@@ -169,6 +169,10 @@ ASSET_ABS = re.compile(r'["\'`(]/((?:[A-Za-z0-9_\-.]+/)*[A-Za-z0-9_\-.]+\.(?:' +
 # `${CDN}/gz-van-apron.webp` — tail only; joined with the file's own base constants
 ASSET_TAIL = re.compile(r'\$\{[A-Za-z0-9_.\[\]\'"]+\}/((?:[A-Za-z0-9_\-.]+/)*[A-Za-z0-9_\-.]+\.(?:' + ASSET_EXT + r'))')
 ASSET_BASE = re.compile(r'=\s*["\'`]/([A-Za-z0-9_\-./]*[A-Za-z0-9_\-])["\'`]')
+# `/img/${name}.webp` — literal dir + interpolated basename; names come from the
+# plain string literals in the same file.
+ASSET_TMPL = re.compile(r'["\'`]/((?:[A-Za-z0-9_\-.]+/)*)\$\{[^}]+\}\.(' + ASSET_EXT + r')["\'`]')
+BARE_STR = re.compile(r'["\']([A-Za-z0-9_\-]{2,40})["\']')
 
 
 def _public_asset_refs(text: str, workspace_root: str) -> list[str]:
@@ -183,6 +187,10 @@ def _public_asset_refs(text: str, workspace_root: str) -> list[str]:
     if tails:
         bases = {m.group(1) for m in ASSET_BASE.finditer(text)}
         rels |= {f"{b}/{t}" for b in bases for t in tails} | tails
+    tmpls = {(m.group(1), m.group(2)) for m in ASSET_TMPL.finditer(text)}
+    if tmpls:
+        names = {m.group(1) for m in BARE_STR.finditer(text)}
+        rels |= {f"{d}{n}.{ext}" for d, ext in tmpls for n in names}
     return [f"{public}/{r}" for r in rels if ".." not in r]
 
 
