@@ -383,3 +383,21 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
   (best4medals-web-production.up.railway.app, 200 again).
 - Apex best4medals.com re-added as a custom domain (Railway id 20abed92..., targetPort 3000).
   Required record: CNAME @ -> wumnd117.up.railway.app (panel domains doc updated to match).
+
+### 2026-10-15 — Provisioned NovaBet (demo casino)
+- New Railway project `novabet` (id 6117f346-39fc-4419-ad95-5f80ae9e487b): novabet-api (FastAPI),
+  novabet-web (CRA+craco -> serve), Mongo 7 (auth, /data/db volume).
+  Script: backend/scripts/setup_novabet.py. Source: Emergent workspace 99fb6e7f (pwd 1d78b278).
+- Env: MONGO_URL=${{Mongo.MONGO_URL}}, DB_NAME=novabet, CORS_ORIGINS=web url, JWT_SECRET,
+  ADMIN_EMAIL/PASSWORD, DEMO_EMAIL/PASSWORD. Web: REACT_APP_BACKEND_URL + PORT=3000 (pinned
+  up front this time — Railway injects 8080 while the domain targetPort is 3000 => 502).
+- GitHub sync OFF. No custom domain yet (user asked for Railway URLs only).
+- FETCHER FIX (emergent_fetcher.py): public assets referenced as `/img/${name}.webp` were never
+  fetched — ASSET_TAIL only matched `${VAR}/file.ext`, not a literal dir with an interpolated
+  basename. Added ASSET_TMPL (literal dir + `${...}` + extension) combined with BARE_STR (plain
+  string literals in the same file) to recover the names. Fetch went 48 -> 52 files; all 8
+  /img/*.webp now serve 200. This generalises the brand-asset fix from the bagbuddy session.
+- Tested (iteration_11.json): backend 18/18, frontend 100% of in-scope flows — lobby, demo +
+  admin login, slots spin, roulette spin, blackjack, crash, wallet deposit/withdraw, SPA deep
+  routes, 390px mobile. Notes: the app has no admin-only UI (workspace-side gap, not hosting),
+  and a harmless 'Unexpected token <' console error from a request hitting the SPA fallback.
