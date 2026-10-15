@@ -163,7 +163,7 @@ async def discover_expo_sources(app_url: str, workspace_root: str = "/app") -> l
                    if s.startswith(root) and "node_modules" not in s})
 
 
-ASSET_EXT = r"png|jpg|jpeg|svg|webp|ico|avif|gif|mp4|webm|woff2?|ttf|pdf"
+ASSET_EXT = r"png|jpg|jpeg|svg|webp|ico|avif|gif|mp4|webm|woff2?|ttf|pdf|html"
 # "/brand/gz-van-apron.webp", src="/img/hero.png", url(/fonts/x.woff2) — any depth
 ASSET_ABS = re.compile(r'["\'`(]/((?:[A-Za-z0-9_\-.]+/)*[A-Za-z0-9_\-.]+\.(?:' + ASSET_EXT + r'))["\'`)?#]')
 # `${CDN}/gz-van-apron.webp` — tail only; joined with the file's own base constants

@@ -401,3 +401,9 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
   admin login, slots spin, roulette spin, blackjack, crash, wallet deposit/withdraw, SPA deep
   routes, 390px mobile. Notes: the app has no admin-only UI (workspace-side gap, not hosting),
   and a harmless 'Unexpected token <' console error from a request hitting the SPA fallback.
+
+## 2026-10-15 — NovaBet crash games fix
+- Root cause: crash games load in an iframe at `/games/crash-pack.html?game=<variant>`. (1) The fetcher never pulled public `.html` files, so the deploy served the SPA instead. (2) `serve` cleanUrls 301-redirected `.html` and dropped `?game=`.
+- Fix: added `html` to ASSET_EXT in `emergent_fetcher.py`; web Dockerfile now writes `build/serve.json` `{"cleanUrls":false}` (setup_novabet.py and the novabet-web docker_template in the DB). Refetched and redeployed novabet-web.
+- Verified live: the iframe loads, a bet of 10 was deducted from the demo balance via /api/games/external/bet, and the balance stayed in sync.
+

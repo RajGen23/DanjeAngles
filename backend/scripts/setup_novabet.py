@@ -42,6 +42,7 @@ FROM node:20-alpine
 WORKDIR /app
 RUN yarn global add serve
 COPY --from=build /app/build ./build
+RUN printf '{"cleanUrls":false}' > build/serve.json
 EXPOSE 3000
 CMD ["sh", "-c", "serve -s build -l ${PORT:-3000}"]
 """
