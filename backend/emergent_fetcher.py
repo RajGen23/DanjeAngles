@@ -35,7 +35,7 @@ STDLIB = {
 
 JS_IMPORT = re.compile(r"""(?:import|from)\s+(?:.*?\s+from\s+)?["']([^"']+)["']""")
 JS_REQUIRE = re.compile(r"""require\(["']([^"']+)["']\)""")
-PY_IMPORT = re.compile(r"""^\s*(?:from\s+([\w\.]+)\s+import|import\s+([\w\.]+))""", re.M)
+PY_IMPORT = re.compile(r"""^\s*(?:from\s+([\w\.]+)\s+import\s+(\([^)]*\)|[^\n]+)|import\s+([\w\.]+))""", re.M)
 
 
 class EmergentFetchError(RuntimeError):
@@ -352,8 +352,14 @@ async def fetch_workspace(url: str, password: str, workspace_root: str = "/app",
                             queue.append(cand)
                 elif lower.endswith(".py"):
                     for m in PY_IMPORT.finditer(text):
-                        mod = m.group(1) or m.group(2)
-                        for cand in _resolve_py(mod, workspace_root):
+                        mod = m.group(1) or m.group(3)
+                        cands = _resolve_py(mod, workspace_root)
+                        if m.group(1):
+                            # `from pkg import a, b` may name submodules pkg/a.py
+                            for name in re.findall(r"\b(\w+)\b(?:\s+as\s+\w+)?", m.group(2).split("#")[0]):
+                                if name != "as":
+                                    cands += _resolve_py(f"{mod}.{name}", workspace_root)
+                        for cand in cands:
                             if cand not in visited:
                                 queue.append(cand)
 
