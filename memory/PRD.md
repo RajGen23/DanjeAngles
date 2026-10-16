@@ -407,3 +407,10 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
 - Fix: added `html` to ASSET_EXT in `emergent_fetcher.py`; web Dockerfile now writes `build/serve.json` `{"cleanUrls":false}` (setup_novabet.py and the novabet-web docker_template in the DB). Refetched and redeployed novabet-web.
 - Verified live: the iframe loads, a bet of 10 was deducted from the demo balance via /api/games/external/bet, and the balance stayed in sync.
 
+
+## 2026-10-15 — TREDI deployed to Railway (Expo Router web + FastAPI + Mongo)
+- Railway project `tredi`: tredi-api, tredi-web, Mongo (volume). Script: `scripts/setup_tredi.py` (node:22, strips the `preinstall` cmd-guard, serve.json cleanUrls false, API healthcheck /docs).
+- Fetcher fix: `from routes import a, b` now pulls routes/a.py and routes/b.py (the API had been crashing with ImportError).
+- Seeded owner@tredi.app plus the business and the app's demo seed; the Super Admin panel is at web /admin/login.
+- Testing agent iteration_12: all backend and frontend checks pass on live Railway.
+

@@ -1,0 +1,30 @@
+{
+  "summary": "Tested the LIVE TREDI Railway deploy end to end (web https://tredi-web-production.up.railway.app + API https://tredi-api-production.up.railway.app). Backend: 22/22 read-only pytest checks pass (OAuth2 form login, me, business 'Tredi Ventures', customers incl. Adeola Stores, customer detail, items, invoices + detail, dashboard/sales/expenses/accounts/reports/suppliers, superadmin login + overview, SPA fallback on deep routes, bundle baked with Railway API URL and no preview.emergentagent.com). CORS preflight from web origin OK. Auth gating OK (owner token, no token -> 401 on /api/admin/*; /api/seed/demo and /api/admin/seed -> 401 without auth). Frontend at 390x844: onboarding -> Skip -> sign-in -> Home (Tredi Ventures, ₦495,900 sales, KPIs, low stock) works; Sales/Invoices, Stock, More, Customers (5 seeded), customer detail, invoice detail INV-1004, quick sale detail, item detail all load; reloading /invoices/{id} restores the screen (no 404). Every captured API request went to tredi-api-production.up.railway.app; no 4xx/5xx, no console errors. Super Admin at 1920x1080: /admin/login -> /admin/overview works, reload holds the session, and all 11 nav sections (Businesses, Subscriptions, Users, Audit log, Sync, System, Backup, Migration, Configuration, Analytics, Security) open with no API errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Sales > quick sale SL-5360xx (from the app's seed)", "issues": ["Seeded quick sales have no item lines ('0 lines' / 'No item lines were saved with this sale'). This is a seed-data quirk in the source app, not a deploy issue."]},
+      {"screen": "Admin desktop 1920", "issues": ["Content stops at about 1290px wide, leaving a large empty strip on the right. Overview copy says 'Fourteen stuck syncs' while the card shows 3 (hardcoded copy in the source app)."]},
+      {"screen": "Invoice detail", "issues": ["The progress bar shows a small filled part even when it says 'Nothing paid yet' (cosmetic)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_tredi_deploy.py", "/app/test_reports/pytest/pytest_tredi.xml"],
+  "action_items": [
+    "Optional: add TREDI credentials/URLs to /app/memory/test_credentials.md (currently missing)",
+    "Optional security: setup_tredi.py hardcodes EMERGENT_LLM_KEY, LEGACY_DB_PASSWORD (DigitalOcean MySQL doadmin) and the workspace password in source; move them to env/DB-only"
+  ],
+  "critical_code_review_comments": [
+    "setup_tredi.py contains plaintext secrets (LLM key, legacy MySQL doadmin password, Emergent workspace pwd). Keep them out of the repo.",
+    "setup_tredi.py is not idempotent: re-running creates a new Railway project/services. Guard it with an existing-project check.",
+    "emergent_fetcher PY_IMPORT: relative imports such as `from . import x` / `from .mod import y` resolve to bad paths like backend//x.py (harmless, but those submodules are never fetched). The new `from pkg import a, b` submodule logic looks correct; 'as' aliases are handled."
+  ],
+  "updated_files": ["/app/backend/tests/test_tredi_deploy.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Owner owner@tredi.app / tredi1234; Super Admin superadmin@tredi.app / tredi1234 (both work). Not yet listed in /app/memory/test_credentials.md.",
+  "seed_data_creation": "None. All tests were read-only; no TEST_ records were created on the live deploy.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run pytest /app/backend/tests/test_tredi_deploy.py (read-only). The web app keeps stacked screens in the DOM, so data-testids repeat; use ':visible' locators (e.g. [data-testid=\"nav-Users\"]:visible). Owner token is stored in localStorage key 'tredi_token'. Admin login uses JSON {email,password}; owner login uses an OAuth2 form."
+}
