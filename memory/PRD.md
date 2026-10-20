@@ -424,3 +424,6 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
 
 - 2026-10-20 NovaBet broken game images: they were referenced only in backend/catalog.py (`/img/game_tower.webp` etc.), so the frontend-only fetch skipped them. The fetcher now scans backend .py files (read-only) for frontend/public asset refs when fetching `frontend`. Refetched novabet-web; all /img/game_*.webp return 200 and the live page has no broken images.
 
+
+
+- 2026-10-20 TREDI refetched from the workspace with the new password (3242881b) and redeployed (tredi-api + tredi-web both live). Owner login (/api/auth/login, form-encoded) returns 200; web returns 200.
