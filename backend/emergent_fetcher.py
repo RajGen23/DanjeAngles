@@ -363,6 +363,35 @@ async def fetch_workspace(url: str, password: str, workspace_root: str = "/app",
                             if cand not in visited:
                                 queue.append(cand)
 
+        # Backend data (catalog/seed modules) can point at frontend/public assets
+        # that no frontend file references — scan backend .py read-only.
+        if subdir and subdir.startswith("frontend"):
+            py_queue = [f"{workspace_root.rstrip('/')}/backend/server.py"]
+            py_seen: set[str] = set()
+            assets: list[str] = []
+            while py_queue and len(py_seen) < 200:
+                batch, py_queue = py_queue[:12], py_queue[12:]
+                batch = [p for p in batch if p not in py_seen]
+                py_seen.update(batch)
+                bodies = await asyncio.gather(*(fetch_one(p) for p in batch), return_exceptions=True)
+                for body in bodies:
+                    if isinstance(body, Exception) or not body:
+                        continue
+                    text = body.decode("utf-8", errors="ignore")
+                    assets += [a for a in _public_asset_refs(text, workspace_root) if a not in visited]
+                    for m in PY_IMPORT.finditer(text):
+                        mod = m.group(1) or m.group(3)
+                        cands = _resolve_py(mod, workspace_root)
+                        if m.group(1):
+                            for name in re.findall(r"\b(\w+)\b(?:\s+as\s+\w+)?", m.group(2).split("#")[0]):
+                                cands += _resolve_py(f"{mod}.{name}", workspace_root)
+                        py_queue += [c for c in cands if c not in py_seen and c.endswith(".py")]
+            assets = list(dict.fromkeys(assets))
+            bodies = await asyncio.gather(*(fetch_one(p) for p in assets), return_exceptions=True)
+            for path, body in zip(assets, bodies):
+                if not isinstance(body, Exception) and body:
+                    save(path, body)
+
         # Fetch common product/asset images (best-effort)
         if not subdir or subdir.startswith("frontend"):
             asset_root = f"{workspace_root.rstrip('/')}/frontend/public"
