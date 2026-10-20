@@ -427,3 +427,5 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
 
 
 - 2026-10-20 TREDI refetched from the workspace with the new password (3242881b) and redeployed (tredi-api + tredi-web both live). Owner login (/api/auth/login, form-encoded) returns 200; web returns 200.
+- 2026-10-20 TREDI legacy DB: I copied LEGACY_DB_HOST/PORT/USER/PASSWORD from the workspace backend/.env to tredi-api on Railway, and /api/admin/legacy-sync now reports configured:true. The sync failed with "No module named migrations" because the job starts `python -m migrations.import_legacy`, and the fetcher did not follow `-m` module refs. The fetcher now follows `python -m pkg.mod` and ["-m","pkg.mod"] (PY_DASH_M). I refetched and redeployed tredi-api; migrations/import_legacy.py is now included. A sync run on the new build has not been verified yet.
+

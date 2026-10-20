@@ -35,6 +35,7 @@ STDLIB = {
 
 JS_IMPORT = re.compile(r"""(?:import|from)\s+(?:.*?\s+from\s+)?["']([^"']+)["']""")
 JS_REQUIRE = re.compile(r"""require\(["']([^"']+)["']\)""")
+PY_DASH_M = re.compile(r"""["']-m["']\s*,\s*["']([\w\.]+)["']|\s-m\s+([\w\.]+)""")
 PY_IMPORT = re.compile(r"""^\s*(?:from\s+([\w\.]+)\s+import\s+(\([^)]*\)|[^\n]+)|import\s+([\w\.]+))""", re.M)
 
 
@@ -359,6 +360,15 @@ async def fetch_workspace(url: str, password: str, workspace_root: str = "/app",
                             for name in re.findall(r"\b(\w+)\b(?:\s+as\s+\w+)?", m.group(2).split("#")[0]):
                                 if name != "as":
                                     cands += _resolve_py(f"{mod}.{name}", workspace_root)
+                        for cand in cands:
+                            if cand not in visited:
+                                queue.append(cand)
+                    # Modules launched as subprocesses: `python -m pkg.mod` / ["-m", "pkg.mod"]
+                    for m in PY_DASH_M.finditer(text):
+                        mod = m.group(1) or m.group(2)
+                        parts = mod.split(".")
+                        cands = [c for i in range(1, len(parts) + 1)
+                                 for c in _resolve_py(".".join(parts[:i]), workspace_root)]
                         for cand in cands:
                             if cand not in visited:
                                 queue.append(cand)
