@@ -414,3 +414,11 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
 - Seeded owner@tredi.app plus the business and the app's demo seed; the Super Admin panel is at web /admin/login.
 - Testing agent iteration_12: all backend and frontend checks pass on live Railway.
 
+
+## 2026-10-20 — NovaBet update + GitHub source deploys
+- NovaBet refetched with the new workspace password (e9d0c733). The new API needed PLAYER_PASSWORD, CASHIER_EMAIL and CASHIER_PASSWORD; after adding them, admin, cashier and player logins return 200.
+- GitHub source feature: per-project repo + branch + folder (Settings → GitHub source; public or private via the server-side GITHUB_PAT). The GitHub button on the project row fetches the branch tarball and deploys through the shared `_deploy_fetched` (same as Emergent refetch; the cached Dockerfile/railway.json still overrides the repo's own).
+- Endpoints: GET /api/github/repos, GET /api/github/branches?repo=, POST/DELETE /api/projects/{pid}/github-source, POST /api/projects/{pid}/github-fetch.
+- Testing agent iteration_13: 11/11 backend and the frontend flows pass. Minor items (branch check on save, DELETE 404, clear() error toast) fixed and checked with curl.
+- Backlog: auto-deploy on push (webhook); option to use the repo's own Dockerfile.
+

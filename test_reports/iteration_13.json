@@ -1,0 +1,35 @@
+{
+  "summary": "Tested the GitHub source feature on backend and frontend without triggering any deploy. Backend: 11/11 pytest checks pass. GET /github/repos returns both RajGen23 repos with private/default_branch. /github/branches works with a slug or a full .git URL and returns ['main']; a bad repo or 'garbage' input gives 400. POST github-source: a missing repo gives 400 'not found...'; an unknown project gives 404; a blank branch falls back to 'main'; the folder '/backend/' is cleaned to 'backend'; the source shows in GET /projects. DELETE clears it. github-fetch with no source gives 400 'not configured'. With folder 'nope' it gives 400 \"Folder 'nope' not found\". With a bad branch it gives 400 'Download failed'. No temp dirs are left in /tmp/selfhost_uploads. Frontend (1920x1080): novabet-api Settings shows the GitHub source section with 2 repo suggestions. Branch auto-fills 'main' when the repo field loses focus. Saving gives the toast 'GitHub source saved: RajGen23/CarRenatlEliteAus@main' and a 'connected' badge. The row shows the badge 'RajGen23/CarRenatlEliteAus@main/backend' and the github-fetch button. Clicking the button opens a confirm dialog, which was DISMISSED, and no github-fetch request was sent. Reopening Settings keeps the saved values. Remove clears the badge, the fetch button and 'connected', and shows the toast 'GitHub source removed'. Emergent source, seed, Railway token and GitHub mirror sections still render. At the end no project has a github_source set.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/projects/{pid}/github-source", "issue": "The branch is not checked on save. A non-existent branch saves with 200 and only fails later, at github-fetch, with 'Download failed ... HTTP 404'. It could be checked against list_branches when saving."},
+      {"endpoint": "DELETE /api/projects/{pid}/github-source", "issue": "Returns 200 for a project that does not exist (it should return 404). It also does not unset github_source_last_sha."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "GithubSourceSection", "issues": ["clear() has no try/catch, so a failed DELETE leaves an unhandled promise rejection and shows no error toast.", "If a GitHub source is set but no Emergent source is, the github-fetch path is fine. But the cached docker_template from earlier deploys always overwrites the repo's Dockerfile, which may surprise users who keep their own Dockerfile in the repo."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_github_source.py", "/app/test_reports/pytest/pytest_github_source.xml"],
+  "action_items": [
+    "Optional: check the branch exists in POST github-source",
+    "Optional: return 404 from DELETE github-source for an unknown project and unset github_source_last_sha",
+    "Optional: add try/catch and an error toast to GithubSourceSection.clear()"
+  ],
+  "critical_code_review_comments": [
+    "_deploy_fetched always overwrites the Dockerfile and railway.json with cached templates, even for GitHub sources where the repo is the source of truth. Consider making this optional for GitHub.",
+    "download_repo loads the whole tarball into memory (r.content). That is fine for small repos, but large monorepos could use a lot of memory. Streaming to a file would be safer.",
+    "list_repos silently returns [] if the PAT is invalid or rate-limited. Surfacing the error would help debugging."
+  ],
+  "updated_files": ["/app/backend/tests/test_github_source.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Panel has no auth.",
+  "seed_data_creation": "None. The GitHub source was set on novabet-api temporarily and cleared afterwards (verified that no project has github_source_repo set).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run pytest /app/backend/tests/test_github_source.py. It is safe: it only hits error paths of github-fetch (no source, bad folder, bad branch), and a module fixture clears the novabet-api github source. Never trigger a successful github-fetch, because it redeploys a live app. In the UI, the fetch button uses window.confirm, so dismiss it with page.on('dialog', d.dismiss())."
+}

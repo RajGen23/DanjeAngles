@@ -44,10 +44,14 @@ export const GithubSourceSection = ({ api, project, onChange }) => {
   };
 
   const clear = async () => {
-    await axios.delete(`${api}/projects/${project.id}/github-source`);
-    setRepo(""); setBranch(""); setFolder(""); setBranches([]);
-    toast.success("GitHub source removed");
-    onChange();
+    try {
+      await axios.delete(`${api}/projects/${project.id}/github-source`);
+      setRepo(""); setBranch(""); setFolder(""); setBranches([]);
+      toast.success("GitHub source removed");
+      onChange();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Remove failed");
+    }
   };
 
   return (

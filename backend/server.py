@@ -980,6 +980,8 @@ async def set_github_source(pid: str, body: GithubSourceInput):
     except gh.GitHubError as e:
         raise HTTPException(400, str(e))
     branch = (body.branch or "").strip() or info["default_branch"]
+    if branch not in await gh.list_branches(full):
+        raise HTTPException(400, f"Branch '{branch}' not found in {full}")
     folder = (body.folder or "").strip().strip("/") or None
     await db.projects.update_one({"id": pid}, {"$set": {
         "github_source_repo": full, "github_source_branch": branch,
@@ -989,8 +991,11 @@ async def set_github_source(pid: str, body: GithubSourceInput):
 
 @api.delete("/projects/{pid}/github-source")
 async def clear_github_source(pid: str):
-    await db.projects.update_one({"id": pid}, {"$unset": {
-        "github_source_repo": "", "github_source_branch": "", "github_source_folder": ""}})
+    r = await db.projects.update_one({"id": pid}, {"$unset": {
+        "github_source_repo": "", "github_source_branch": "", "github_source_folder": "",
+        "github_source_last_sha": ""}})
+    if not r.matched_count:
+        raise HTTPException(404, "Project not found")
     return {"cleared": True}
 
 
