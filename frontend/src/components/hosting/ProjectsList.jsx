@@ -58,6 +58,21 @@ export default function ProjectsList({ projects, api, onChange, onOpenEnv, onOpe
     }
   };
 
+  const githubFetch = async (p) => {
+    const src = `${p.github_source_repo}@${p.github_source_branch || "main"}${p.github_source_folder ? ` /${p.github_source_folder}` : ""}`;
+    if (!window.confirm(`Fetch ${src} from GitHub and deploy '${p.name}'? Takes ~2-3 minutes.`)) return;
+    setBusy(p.id + "ghfetch");
+    try {
+      await axios.post(`${api}/projects/${p.id}/github-fetch`);
+      toast.success(`Fetching ${src} from GitHub → deploying...`);
+      onChange();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "GitHub fetch failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const addMongo = async (p) => {
     if (!window.confirm(`Provision a MongoDB service inside '${p.name}'? It will be auto-wired via MONGO_URL and DB_NAME env vars.`)) return;
     setBusy(p.id + "mongo");
@@ -151,6 +166,11 @@ export default function ProjectsList({ projects, api, onChange, onOpenEnv, onOpe
                       <Database size={9} strokeWidth={2} /> mongo
                     </span>
                   )}
+                  {p.github_source_repo && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-100 text-neutral-700 border border-neutral-200 font-mono" data-testid={`github-source-badge-${p.name}`}>
+                      {p.github_source_repo}@{p.github_source_branch || "main"}{p.github_source_folder ? `/${p.github_source_folder}` : ""}
+                    </span>
+                  )}
                   {p.github_sync && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-900 text-white flex items-center gap-1" data-testid={`github-badge-${p.name}`}>
                       <Github size={9} strokeWidth={2} /> synced
@@ -224,6 +244,17 @@ export default function ProjectsList({ projects, api, onChange, onOpenEnv, onOpe
                     active={true}
                   >
                     <RefreshCw size={14} strokeWidth={1.5} className={busy === p.id + "refetch" ? "animate-spin" : ""} />
+                  </IconBtn>
+                )}
+                {p.github_source_repo && (
+                  <IconBtn
+                    title={`Fetch from GitHub (${p.github_source_repo}@${p.github_source_branch || "main"}) & deploy`}
+                    onClick={() => githubFetch(p)}
+                    disabled={busy === p.id + "ghfetch" || p.status === "deploying"}
+                    testId={`github-fetch-btn-${p.name}`}
+                    active={true}
+                  >
+                    <Github size={14} strokeWidth={1.5} className={busy === p.id + "ghfetch" ? "animate-pulse" : ""} />
                   </IconBtn>
                 )}
                 <IconBtn

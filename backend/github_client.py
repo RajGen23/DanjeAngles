@@ -7,7 +7,10 @@ force-push on the `main` branch with a commit tagged `Deploy v<N>`.
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
+import re
+import tarfile
 import os
 import shutil
 import subprocess
@@ -82,6 +85,91 @@ async def ensure_repo(name: str, private: bool = True, description: str = "") ->
         data = r.json()
         return {"owner": owner, "name": data["name"],
                 "html_url": data["html_url"], "clone_url": data["clone_url"]}
+
+
+def _headers() -> dict:
+    tok = _pat()
+    h = {"Accept": "application/vnd.github+json"}
+    if tok:
+        h["Authorization"] = f"Bearer {tok}"
+    return h
+
+
+def parse_repo(value: str) -> str:
+    """'https://github.com/o/r(.git)' or 'o/r' -> 'o/r'."""
+    v = value.strip().rstrip("/")
+    v = re.sub(r"^(https?://)?(www\.)?github\.com/", "", v)
+    v = re.sub(r"\.git$", "", v)
+    parts = v.split("/")
+    if len(parts) < 2 or not all(parts[:2]):
+        raise GitHubError("Use owner/repo or a github.com repo URL")
+    return f"{parts[0]}/{parts[1]}"
+
+
+async def get_repo(full: str) -> dict:
+    async with httpx.AsyncClient(timeout=20) as c:
+        r = await c.get(f"https://api.github.com/repos/{full}", headers=_headers())
+    if r.status_code == 404:
+        raise GitHubError(f"Repo {full} not found, or the panel's GitHub token can't see it")
+    if r.status_code != 200:
+        raise GitHubError(f"GitHub error {r.status_code}: {r.text[:200]}")
+    return r.json()
+
+
+async def list_repos() -> list[dict]:
+    if not _pat():
+        return []
+    out: list[dict] = []
+    async with httpx.AsyncClient(timeout=20) as c:
+        for page in (1, 2, 3):
+            r = await c.get("https://api.github.com/user/repos", headers=_headers(),
+                            params={"per_page": 100, "page": page, "sort": "updated"})
+            if r.status_code != 200:
+                break
+            batch = r.json()
+            out += [{"full_name": x["full_name"], "private": x["private"],
+                     "default_branch": x["default_branch"]} for x in batch]
+            if len(batch) < 100:
+                break
+    return out
+
+
+async def list_branches(full: str) -> list[str]:
+    async with httpx.AsyncClient(timeout=20) as c:
+        r = await c.get(f"https://api.github.com/repos/{full}/branches",
+                        headers=_headers(), params={"per_page": 100})
+    if r.status_code != 200:
+        raise GitHubError(f"Could not list branches ({r.status_code})")
+    return [b["name"] for b in r.json()]
+
+
+async def download_repo(full: str, branch: str, folder: Optional[str], dest: Path) -> tuple[Path, str]:
+    """Download branch tarball, copy `folder` (or whole repo) into dest. Returns (dest, commit sha)."""
+    async with httpx.AsyncClient(timeout=120, follow_redirects=True) as c:
+        r = await c.get(f"https://api.github.com/repos/{full}/tarball/{branch}", headers=_headers())
+        if r.status_code != 200:
+            raise GitHubError(f"Download failed for {full}@{branch}: HTTP {r.status_code}")
+        sha_r = await c.get(f"https://api.github.com/repos/{full}/commits/{branch}", headers=_headers())
+    sha = sha_r.json().get("sha", "")[:7] if sha_r.status_code == 200 else ""
+    tmp = dest.parent / f"{dest.name}_tar"
+    tmp.mkdir(parents=True, exist_ok=True)
+    try:
+        with tarfile.open(fileobj=io.BytesIO(r.content), mode="r:gz") as tf:
+            tf.extractall(tmp, filter="data")
+        roots = [p for p in tmp.iterdir() if p.is_dir()]
+        if not roots:
+            raise GitHubError("Empty repository archive")
+        src = roots[0]
+        if folder and folder.strip("/"):
+            src = src / folder.strip("/")
+            if not src.is_dir():
+                raise GitHubError(f"Folder '{folder}' not found on branch {branch}")
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(src, dest)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return dest, sha
 
 
 async def push_source(source_dir: str, repo_owner: str, repo_name: str,

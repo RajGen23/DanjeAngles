@@ -3,6 +3,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { Database, ExternalLink, Github, Globe, KeyRound, RefreshCw, User, X } from "lucide-react";
+import { GithubSourceSection } from "./GithubSourceSection";
 
 export default function ProjectSettingsModal({ api, project, ghUser, onClose, onChange }) {
   const [token, setToken] = useState("");
@@ -231,6 +232,8 @@ export default function ProjectSettingsModal({ api, project, ghUser, onClose, on
                 </button>
               </div>
             </div>
+
+            <GithubSourceSection key={project.id} api={api} project={project} onChange={onChange} />
 
             {/* Reseed demo data */}
             <div>

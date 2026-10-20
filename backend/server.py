@@ -94,6 +94,12 @@ class EmergentSourceInput(BaseModel):
     railway_json: Optional[str] = None
 
 
+class GithubSourceInput(BaseModel):
+    repo: str
+    branch: Optional[str] = None
+    folder: Optional[str] = None
+
+
 def _rand_password(n: int = 24) -> str:
     import secrets, string
     alpha = string.ascii_letters + string.digits
@@ -948,7 +954,65 @@ async def refetch_and_deploy(pid: str):
         )
     except Exception as e:
         raise HTTPException(500, f"Fetch failed: {e}")
+    return await _deploy_fetched(pid, project, dest, "Emergent")
 
+
+@api.get("/github/repos")
+async def github_repos():
+    return {"repos": await gh.list_repos()}
+
+
+@api.get("/github/branches")
+async def github_branches(repo: str):
+    try:
+        return {"branches": await gh.list_branches(gh.parse_repo(repo))}
+    except gh.GitHubError as e:
+        raise HTTPException(400, str(e))
+
+
+@api.post("/projects/{pid}/github-source")
+async def set_github_source(pid: str, body: GithubSourceInput):
+    if not await db.projects.find_one({"id": pid}, {"_id": 1}):
+        raise HTTPException(404, "Project not found")
+    try:
+        full = gh.parse_repo(body.repo)
+        info = await gh.get_repo(full)
+    except gh.GitHubError as e:
+        raise HTTPException(400, str(e))
+    branch = (body.branch or "").strip() or info["default_branch"]
+    folder = (body.folder or "").strip().strip("/") or None
+    await db.projects.update_one({"id": pid}, {"$set": {
+        "github_source_repo": full, "github_source_branch": branch,
+        "github_source_folder": folder}})
+    return {"repo": full, "branch": branch, "folder": folder}
+
+
+@api.delete("/projects/{pid}/github-source")
+async def clear_github_source(pid: str):
+    await db.projects.update_one({"id": pid}, {"$unset": {
+        "github_source_repo": "", "github_source_branch": "", "github_source_folder": ""}})
+    return {"cleared": True}
+
+
+@api.post("/projects/{pid}/github-fetch")
+async def github_fetch_and_deploy(pid: str):
+    project = await db.projects.find_one({"id": pid}, {"_id": 0})
+    if not project:
+        raise HTTPException(404, "Project not found")
+    full = project.get("github_source_repo")
+    if not full:
+        raise HTTPException(400, "GitHub source not configured — set it in project settings first")
+    branch = project.get("github_source_branch") or "main"
+    dest = UPLOAD_ROOT / f"gh_{uuid.uuid4()}"
+    try:
+        _, sha = await gh.download_repo(full, branch, project.get("github_source_folder"), dest)
+    except gh.GitHubError as e:
+        raise HTTPException(400, str(e))
+    await db.projects.update_one({"id": pid}, {"$set": {"github_source_last_sha": sha}})
+    return await _deploy_fetched(pid, project, dest, f"GitHub {full}@{branch} {sha}".strip())
+
+
+async def _deploy_fetched(pid: str, project: dict, dest: Path, label: str) -> dict:
     # Inject cached Dockerfile / railway.json if present.
     # Always OVERWRITE — the cached template is authoritative (contains fixes
     # like the mobile canonical sed step that the fetched source may lack).
@@ -976,7 +1040,7 @@ async def refetch_and_deploy(pid: str):
         "id": deployment_id, "project_id": pid, "project_name": project["name"],
         "status": "building", "progress": 0,
         "logs": [{"ts": now_iso(), "level": "info",
-                   "msg": f"Refetched {sum(1 for _ in dest.rglob('*') if _.is_file())} files from Emergent — starting deploy"}],
+                   "msg": f"Refetched {sum(1 for _ in dest.rglob('*') if _.is_file())} files from {label} — starting deploy"}],
         "created_at": now_iso(), "finished_at": None, "railway_deployment_id": None,
     })
     asyncio.create_task(run_real_deploy(deployment_id, pid, str(zip_path), project["name"], initial_env))
