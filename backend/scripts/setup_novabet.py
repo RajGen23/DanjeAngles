@@ -8,7 +8,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 import railway_client as rw  # noqa: E402
 
 SRC_URL = "https://vscode-99fb6e7f-0472-418f-bef7-4eefe91aac0f.preview.emergentagent.com"
-SRC_PWD = "1d78b278"
+SRC_PWD = "e9d0c733"
 API_ID, WEB_ID = "novabet-api", "novabet-web"
 ADMIN_EMAIL, ADMIN_PASSWORD = "admin@novabet.demo", "Admin@123"
 DEMO_EMAIL, DEMO_PASSWORD = "demo@novabet.demo", "demo1234"
