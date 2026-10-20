@@ -430,4 +430,6 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
 - 2026-10-20 TREDI legacy DB: I copied LEGACY_DB_HOST/PORT/USER/PASSWORD from the workspace backend/.env to tredi-api on Railway, and /api/admin/legacy-sync now reports configured:true. The sync failed with "No module named migrations" because the job starts `python -m migrations.import_legacy`, and the fetcher did not follow `-m` module refs. The fetcher now follows `python -m pkg.mod` and ["-m","pkg.mod"] (PY_DASH_M). I refetched and redeployed tredi-api; migrations/import_legacy.py is now included. A sync run on the new build has not been verified yet.
 
 - 2026-10-20 DakEvents updated in place (user's choice): refetched from the workspace with the new password (7a243bc7) and redeployed dakevents-api and dakevents-web. Both are live; admin, superadmin, user and vendor logins return 200; the web login page renders.
+- 2026-10-20 DakEvents Android fixes (made by the workspace agent: Railway backend URL, /api/health, favourites endpoints, error screens) were refetched and redeployed. Live checks: /api/health returns {"status":"ok","database":true}; POST and DELETE /api/favorites/{vendor_id} return 200 (the test favourite was removed); web returns 200. The new Android build still needs the user to test it on a phone.
+
 
