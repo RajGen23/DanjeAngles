@@ -431,5 +431,7 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
 
 - 2026-10-20 DakEvents updated in place (user's choice): refetched from the workspace with the new password (7a243bc7) and redeployed dakevents-api and dakevents-web. Both are live; admin, superadmin, user and vendor logins return 200; the web login page renders.
 - 2026-10-20 DakEvents Android fixes (made by the workspace agent: Railway backend URL, /api/health, favourites endpoints, error screens) were refetched and redeployed. Live checks: /api/health returns {"status":"ok","database":true}; POST and DELETE /api/favorites/{vendor_id} return 200 (the test favourite was removed); web returns 200. The new Android build still needs the user to test it on a phone.
+- 2026-10-21 NovaBet updated from the user's zip (Nova-main), because the RajGen23/Nova repo is private and the panel's GitHub token cannot see it. The zip had no frontend yarn.lock, so I generated one locally with yarn install. Both zips were packaged with the cached Dockerfile and railway.json and uploaded through /api/deploy with project_id (novabet-api, novabet-web). Both are live. Admin, cashier and player1 logins return 200; game images and crash-pack.html return 200; the home page has no broken images. The new code can also seed a manager if MANAGER_PASSWORD is set; it is not set on Railway.
+
 
 
