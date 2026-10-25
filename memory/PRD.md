@@ -439,3 +439,5 @@ Browser  →  FastAPI panel  →  MongoDB (panel state)
 
 
 
+- 2026-10-25 Root cause of the "Deploys have been paused" errors: the panel's RAILWAY_TOKEN had stopped working (likely revoked after Railway's October incident); every query returned Not Authorized, and the stored project tokens are "not found". The user saved a new token, and projects can be listed again. Then I ran scripts/setup_dananjels.py and refetched both services. dananjels-dolls api and web are live; admin login returns 200; 13 products; the home page has no broken images. Not verified: Stripe checkout on Railway (STRIPE_API_KEY=sk_test_emergent copied from the workspace).
+
