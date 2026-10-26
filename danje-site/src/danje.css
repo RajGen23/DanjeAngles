@@ -1155,3 +1155,4 @@ section.dj-hero.dj-sky {
   .dj-cartline__img { width: 64px; height: 74px; }
   .dj-cartline__total { grid-column: 2; }
 }
+.dj-footer__staff { color: #b6a6d6; text-decoration: underline; } .dj-footer__staff:hover { color: #fff; }

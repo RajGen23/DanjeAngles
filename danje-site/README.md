@@ -53,3 +53,18 @@ Build with the store API so checkout, newsletter, contact and reviews are real:
    "sk_test_emergent" (only works inside Emergent). Set a real Stripe secret key on dananjels-dolls-api.
 2. The live /contact page renders nothing (blank between header and footer).
 3. GET /api/products/{slug}/reviews returns reviewers' email addresses publicly. Strip "email" from the public response.
+
+## Store admin panel (`/admin`)
+React pages under `src/admin/`, served by the same site at `/admin` (also linked as "Staff sign-in" in the footer).
+
+- **Dashboard:** revenue, paid orders, average order, visitors, conversion rate, wishlist adds (7/30/90 days, vs previous period),
+  revenue per day, visitors per day, live visitors, best sellers, most wishlisted, shopper funnel, latest orders.
+- **Orders:** filter by period and status, search, order detail panel, CSV export.
+- **Visitors & Wishlist:** visitors per day, wishlist leaderboard, basket adds, top pages, traffic sources, devices, searches.
+- **Products:** edit price, stock and featured status inline; add a product with photo upload.
+- **Reviews:** all reviews with ratings, delete with confirmation. **Subscribers:** list + CSV export. **Messages:** contact form inbox.
+- **Team & access / My account:** team members, roles, per-person access, password reset and change.
+- **Sample data mode** to explore the panel without the backend (clearly labelled).
+
+Uses the store's existing admin API. Visitor/wishlist numbers and team accounts need the two add-ons in
+`backend-addon/` (see its README). The storefront sends anonymous events from `src/track.js` when built with `VITE_API_URL`.

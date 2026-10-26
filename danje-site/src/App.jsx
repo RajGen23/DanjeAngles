@@ -9,6 +9,8 @@ import Shop from "./pages/Shop.jsx";
 import About from "./pages/About.jsx";
 import Product from "./pages/Product.jsx";
 import { CartProvider } from "./cart.jsx";
+import { track } from "./track.js";
+import AdminApp from "./admin/AdminApp.jsx";
 import CartDrawer from "./components/CartDrawer.jsx";
 import Contact from "./pages/Contact.jsx";
 import { Faith, EveryChild, Reviews, NotFound } from "./pages/InfoPages.jsx";
@@ -23,6 +25,7 @@ function ScrollTop() {
     }
     window.scrollTo(0, 0);
   }, [pathname, hash]);
+  useEffect(() => { track(pathname.startsWith("/product/") ? "product_view" : "pageview", pathname.startsWith("/product/") ? { slug: pathname.split("/")[2] } : {}); }, [pathname]);
   return null;
 }
 
@@ -37,6 +40,8 @@ function HeaderWithCart() {
 }
 
 export default function App() {
+  const { pathname } = useLocation();
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) return <AdminApp />;
   return (
     <CartProvider>
     <div className="dj">

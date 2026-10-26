@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { X, Minus, Plus, Trash2, ShoppingBag, Lock, ArrowRight } from "lucide-react";
 import { useCart, FREE_SHIPPING_FROM } from "../cart.jsx";
 import { startCheckout, API_ENABLED } from "../api.js";
+import { track } from "../track.js";
 import { Crown } from "./Decor.jsx";
 
 const money = (n) => `$${n.toFixed(2)}`;
@@ -26,6 +27,7 @@ export default function CartDrawer() {
     setError(""); setNote("");
     if (email && !/^\S+@\S+\.\S+$/.test(email)) { setError("Please enter a valid email address, or leave it empty."); return; }
     setBusy(true);
+    track("checkout_start", { value: total, qty: count });
     try {
       const res = await startCheckout(lines.map((l) => ({ slug: l.product.slug, quantity: l.qty })), email);
       if (res?.preview) {

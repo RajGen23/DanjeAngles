@@ -37,7 +37,7 @@ export default function SiteFooter() {
         </div>
       </div>
       <div className="dj-container dj-footer__bottom">
-        <span>© 2026 DanJe’ Angels. Made with prayer and care.</span>
+        <span>© 2026 DanJe’ Angels. Made with prayer and care. · <Link to="/admin" className="dj-footer__staff">Staff sign-in</Link></span>
         <span className="dj-footer__tag"><Crown size={14} /> Bringing Heaven to Earth</span>
       </div>
     </footer>

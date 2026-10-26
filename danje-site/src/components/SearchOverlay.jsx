@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Search, X } from "lucide-react";
 import { products } from "../data/angels.js";
+import { track } from "../track.js";
 
 export default function SearchOverlay({ open, onClose }) {
   const [q, setQ] = useState("");
@@ -15,6 +16,12 @@ export default function SearchOverlay({ open, onClose }) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  useEffect(() => {
+    const t = q.trim(); if (t.length < 3) return;
+    const h = setTimeout(() => track("search", { query: t.slice(0, 60) }), 1200);
+    return () => clearTimeout(h);
+  }, [q]);
 
   const results = useMemo(() => {
     const t = q.trim().toLowerCase();

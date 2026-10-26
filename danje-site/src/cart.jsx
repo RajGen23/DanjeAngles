@@ -1,6 +1,7 @@
 // Cart + wishlist. Saved in the browser so the basket survives a page reload.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { products } from "./data/angels.js";
+import { track } from "./track.js";
 
 const CartCtx = createContext(null);
 const KEY = "dj-cart-v1";
@@ -35,6 +36,8 @@ export function CartProvider({ children }) {
       items, lines, subtotal, shipping, total: subtotal + shipping,
       count: items.reduce((n, i) => n + i.qty, 0),
       add: (id, qty = 1) => {
+        const pr = products.find((x) => x.id === id);
+        track("cart_add", { slug: pr?.slug, qty, value: pr ? pr.price * qty : 0 });
         setItems((cur) => {
           const f = cur.find((i) => i.id === id);
           return f ? cur.map((i) => (i.id === id ? { ...i, qty: Math.min(i.qty + qty, 20) } : i)) : [...cur, { id, qty }];
@@ -46,7 +49,10 @@ export function CartProvider({ children }) {
       clear: () => setItems([]),
       open, setOpen,
       liked,
-      toggleLike: (id) => setLiked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; }),
+      toggleLike: (id) => {
+        track(liked.has(id) ? "wishlist_remove" : "wishlist_add", { slug: products.find((x) => x.id === id)?.slug });
+        setLiked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+      },
     };
   }, [items, liked, open, setQty]);
 
