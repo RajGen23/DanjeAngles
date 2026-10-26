@@ -1156,3 +1156,53 @@ section.dj-hero.dj-sky {
   .dj-cartline__total { grid-column: 2; }
 }
 .dj-footer__staff { color: #b6a6d6; text-decoration: underline; } .dj-footer__staff:hover { color: #fff; }
+
+/* ---------- Product reviews (summary + list in one panel) ---------- */
+.dj-rv {
+  position: relative; z-index: 2; max-width: 1140px; margin: 40px auto 0; padding: 30px; border-radius: 22px;
+  display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 36px; align-items: start;
+  background: rgba(255, 255, 255, .94); box-shadow: 0 40px 80px -40px rgba(120, 80, 170, .35);
+}
+.dj-rv__summary { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 16px; }
+.dj-rv__summary .dj-h2 { font-size: clamp(28px, 2.6vw, 36px); }
+.dj-rv__stars { display: inline-flex; gap: 2px; }
+.dj-rv__avg { display: flex; align-items: center; gap: 14px; }
+.dj-rv__avg strong { font-family: var(--serif); font-size: 52px; line-height: 1; color: var(--ink); }
+.dj-rv__avg div { display: flex; flex-direction: column; gap: 4px; }
+.dj-rv__avg span { font-size: 13.5px; color: var(--muted); }
+.dj-rv__dist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dj-rv__dist li { display: grid; grid-template-columns: 34px 1fr 22px; align-items: center; gap: 8px; font-size: 13px; color: #5b4f75; }
+.dj-rv__dist li span { display: inline-flex; align-items: center; gap: 3px; }
+.dj-rv__dist i { height: 8px; border-radius: 99px; background: #f1e8f5; overflow: hidden; }
+.dj-rv__dist b { display: block; height: 100%; border-radius: 99px; background: #f5b82e; }
+.dj-rv__dist em { font-style: normal; text-align: right; font-variant-numeric: tabular-nums; }
+.dj-rv__none { color: #4a3d66; line-height: 1.6; }
+.dj-rv__write { align-self: flex-start; }
+.dj-rv__thanks { display: flex; gap: 8px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: #eaf7ef; color: #23784c; font-size: 13.5px; line-height: 1.5; }
+.dj-rv__main { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.dj-rv__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.dj-rv__item { padding: 20px 0; border-bottom: 1px solid #f0e7f4; }
+.dj-rv__item:first-child { padding-top: 4px; }
+.dj-rv__item:last-child { border-bottom: 0; }
+.dj-rv__who { display: flex; align-items: center; gap: 12px; }
+.dj-rv__who > div { flex: 1; display: flex; flex-direction: column; }
+.dj-rv__who strong { color: var(--ink); font-size: 15px; }
+.dj-rv__who small { color: var(--muted); font-size: 12.5px; }
+.dj-rv__avatar { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; font-weight: 600; color: #fff; background: linear-gradient(135deg, #b383e6, #7a33ab); }
+.dj-rv__item p { margin: 12px 0 0 52px; font-family: var(--serif); font-size: 19px; line-height: 1.55; color: var(--ink-2); }
+.dj-rv__empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 200px; border: 1.5px dashed #e6d6ee; border-radius: 18px; color: #5b4f75; text-align: center; padding: 24px; }
+.dj-rv__form { display: flex; flex-direction: column; gap: 14px; padding: 22px; border-radius: 18px; background: #fbf7fd; border: 1px solid #efe4f4; }
+.dj-rv__formhead { display: flex; justify-content: space-between; align-items: center; }
+.dj-rv__formhead button { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: #fff; color: var(--ink-2); }
+.dj-rv__rate { display: flex; align-items: center; gap: 4px; }
+.dj-rv__rate button { padding: 2px; transition: transform .15s; }
+.dj-rv__rate button:hover { transform: scale(1.12); }
+.dj-rv__rate span { margin-left: 10px; font-size: 14px; color: #5b4f75; font-weight: 500; }
+.dj-rv__form .dj-label small { font-weight: 400; color: var(--muted); }
+.dj-rv__actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.dj-rv__actions .dj-btn { height: 46px; }
+@media (max-width: 860px) {
+  .dj-rv { grid-template-columns: 1fr; gap: 22px; padding: 22px 18px; }
+  .dj-rv__summary { position: static; }
+  .dj-rv__item p { margin-left: 0; font-size: 17px; }
+}
